@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+# Install Orbstack for Docker
+brew install orbstack

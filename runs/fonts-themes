@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+echo "installing nerd fonts"
+brew install --cask font-terminess-ttf-nerd-font
+brew install --cask font-iosevka-term-slab-nerd-font
+brew install --cask font-fira-code-nerd-font
+
+

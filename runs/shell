@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# ====== Utils/CLI tools ======= 
+# FZF for fuzzy finding on anything you pass in
+echo "cloning FZF and running install script"
+git clone git@github.com:junegunn/fzf.git $HOME/personal/fzf
+$HOME/personal/fzf/install --all
+
+# bat syntax highlighted cat
+echo "installing bat- syntax highlighed cat alternative"
+brew install bat
+
+# NVM - Node version manager
+echo "installing NVM - node version manager"
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+
+# Parallel - tool to run commands in parallel
+echo "installing parallel"
+brew install parallel
+
+# ===== CLI apps =====
+# Github cli
+echo "installing github cli & running login"
+brew install gh
+
+# Check if we are already logged in
+active_hosts=$(gh auth status --active --json hosts --jq '.hosts | add | map(select(.active)) | length' 2>/dev/null || echo 0)
+# Log in to github if we aren't logged in yet
+if [ "$active_hosts" -gt 0 ]; then
+  echo "already logged in to GitHub CLI, skipping auth login"
+else
+  gh auth login
+fi
+
+# claude code
+if claude --version &>/dev/null; then
+  echo "Claude Code already installed, updating"
+  claude update
+else
+  echo "installing Claude Code CLI"
+  curl -fsSL https://claude.ai/install.sh | bash
+fi
+
+# starship prompt
+curl -sS https://starship.rs/install.sh | sh
+
+# postgresql @17 for TMRW core
+brew install postgresql@17
+
+# remind user to reload shell
+echo "Run 'source ~/.zshrc' or open a new terminal to pick up changes"

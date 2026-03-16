@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+echo "installing slack with Homebrew"
+
+brew install --cask slack

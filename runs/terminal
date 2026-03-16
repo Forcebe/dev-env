@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+echo "installing ghostty with Homebrew"
+brew install --cask ghostty
+
+echo "installing tmux with Homebrew"
+brew install tmux
