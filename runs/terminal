@@ -5,3 +5,6 @@ brew install --cask ghostty
 
 echo "installing tmux with Homebrew"
 brew install tmux
+
+echo "installing tmux plugin manager"
+git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
