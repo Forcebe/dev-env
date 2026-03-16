@@ -1,25 +1,45 @@
 #!/usr/bin/env bash
 
-#todo: what about work stuff?
-selected=$(find ~/personal -mindepth 1 -maxdepth 1 -type d | ~/personal/fzf/bin/fzf)
+PERSONAL_DIR=~/personal
+TMRW_DIR=~/tmrw
+
+# Determine search directory
+search_dir=""
+cwd=$(pwd)
+
+if [[ "$cwd" == "$PERSONAL_DIR"* ]]; then
+	search_dir="$PERSONAL_DIR"
+elif [[ "$cwd" == "$TMRW_DIR"* ]]; then
+	search_dir="$TMRW_DIR"
+else
+	while getopts "tp" opt; do
+		case $opt in
+			t) search_dir="$TMRW_DIR" ;;
+			p) search_dir="$PERSONAL_DIR" ;;
+		esac
+	done
+	search_dir="${search_dir:-$TMRW_DIR}"
+fi
+
+selected=$(find "$search_dir" -mindepth 1 -maxdepth 1 -type d | fzf)
 
 if [[ -z "$selected" ]]; then
 	exit 0
 fi
-selected_name=$(basename $selected | tr ".,: " "____")
+selected_name=$(basename "$selected" | tr ".,: " "____")
 
 switch_to() {
 	if [[ -z "$TMUX" ]]; then
-		tmux attach-session -t $selected_name
+		tmux attach-session -t "$selected_name"
 	else
-		tmux switch-client -t $selected_name
+		tmux switch-client -t "$selected_name"
 	fi
 }
 
-if tmux has-session -t=$selected_name 2> /dev/null; then
+if tmux has-session -t="$selected_name" 2> /dev/null; then
 	switch_to
 else
-	tmux new-session -ds $selected_name -c $selected
+	tmux new-session -ds "$selected_name" -c "$selected"
 	switch_to
-	tmux send-keys -t $selected_name "ready-tmux" ^M
+	tmux send-keys -t "$selected_name" "ready-tmux" ^M
 fi
