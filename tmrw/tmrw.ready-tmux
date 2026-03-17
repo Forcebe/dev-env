@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 
 session=$1
+dir=$2
 
 tmux rename-window -t "=$session:0" "tmrw-dev"
 pane=$(tmux list-panes -t "=$session:0" -F '#{pane_id}' | head -1)
 tmux send-keys -t "$pane" "nvim ." Enter
-new_pane=$(tmux split-window -v -t "$pane" -PF '#{pane_id}')
-bottom_right=$(tmux split-window -h -t "$new_pane" -PF '#{pane_id}')
+new_pane=$(tmux split-window -v -t "$pane" -c "$dir" -PF '#{pane_id}')
+bottom_right=$(tmux split-window -h -t "$new_pane" -c "$dir" -PF '#{pane_id}')
 tmux send-keys -t "$bottom_right" "claude" Enter
 tmux select-pane -t "$pane"
 

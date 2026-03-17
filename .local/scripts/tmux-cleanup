@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+# Kill all processes in all tmux panes
+for pane_id in $(tmux list-panes -a -F '#{pane_id}'); do
+	pane_pid=$(tmux display-message -t "$pane_id" -p '#{pane_pid}')
+	# Kill child processes of each pane
+	pkill -TERM -P "$pane_pid" 2>/dev/null
+done
+
+# Kill tmux server (all sessions)
+tmux kill-server 2>/dev/null
+
+# Close all but one ghostty window
+osascript -e '
+tell application "Ghostty"
+	set windowCount to count of windows
+	repeat (windowCount - 1) times
+		close window 1
+	end repeat
+end tell
+' 2>/dev/null
