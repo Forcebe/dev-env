@@ -34,33 +34,60 @@ copy_dir() {
 	to=$2
 
 	pushd $from > /dev/null
-	# Recursively copy subdirectories of $from into $to
-    dirs=$(find . -maxdepth 1 -mindepth 1 -type d)
+	dirs=$(find . -maxdepth 1 -mindepth 1 -type d)
 	for dir in $dirs; do
 		execute rm -rf $to/$dir
 		execute cp -r $dir $to/$dir
 	done
-    # Copy all files in the root of $from into $to
-    files=$(find . -maxdepth 1 -mindepth 1 -type f)
-    for file in $files; do
-        execute cp $file $to/$file
-    done
+	files=$(find . -maxdepth 1 -mindepth 1 -type f)
+	for file in $files; do
+		execute cp $file $to/$file
+	done
 	popd > /dev/null
 }
 
 copy_file() {
 	from=$1
 	to=$2
-	name=($basename $from)
-
+	name=$(basename $from)
 
 	execute rm $to/$name
 	execute cp $from $to/$name
 }
 
+log ""
+log "--- copying config dirs ---"
 copy_dir .config $HOME/.config
 copy_dir .local $HOME/.local
+
+log ""
+log "--- copying config files ---"
 copy_file .zshrc $HOME
-# remind user to reload shell
-echo "Run 'source ~/.zshrc' or open a new terminal to pick up changes"
-echo "Run 'prefix + I' in tmux to install plugins"
+
+log ""
+log "--- copying ready-tmux scripts ---"
+copy_file .ready-tmux $HOME
+if [[ -d "$HOME/tmrw" ]] && [[ ! -f "$HOME/tmrw/.ready-tmux" ]]; then
+	log "cp tmrw/tmrw.ready-tmux -> ~/tmrw/.ready-tmux"
+	if [[ $dry == "0" ]]; then
+		cp "$script_dir/tmrw/tmrw.ready-tmux" "$HOME/tmrw/.ready-tmux"
+	fi
+fi
+for repo in tmrw-client tmrw-protocols tmrw-core-api; do
+	repo_dir="$HOME/tmrw/$repo"
+	if [[ -d "$repo_dir" ]]; then
+		if [[ ! -f "$repo_dir/.ready-tmux" ]]; then
+			log "cp tmrw/$repo.ready-tmux -> ~/tmrw/$repo/.ready-tmux"
+			if [[ $dry == "0" ]]; then
+				cp "$script_dir/tmrw/$repo.ready-tmux" "$repo_dir/.ready-tmux"
+			fi
+		fi
+		exclude="$repo_dir/.git/info/exclude"
+		if [[ -f "$exclude" ]] && ! grep -q '\.ready-tmux' "$exclude"; then
+			echo ".ready-tmux" >> "$exclude"
+		fi
+	fi
+done
+
+log ""
+echo "Run 'source ~/.zshrc' and 'prefix + I' in tmux to finish setup"

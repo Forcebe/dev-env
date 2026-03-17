@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
-if [[ -x ".ready-tmux" ]]; then
-	./.ready-tmux
-elif [[ -x "~/.ready-tmux" ]]; then
-	~/.ready-tmux
+session=$1
+dir=$2
+
+if [[ -x "$dir/.ready-tmux" ]]; then
+	"$dir/.ready-tmux" "$session"
+elif [[ -x "$HOME/.ready-tmux" ]]; then
+	"$HOME/.ready-tmux" "$session"
 fi
-clear

@@ -40,6 +40,6 @@ if tmux has-session -t="$selected_name" 2> /dev/null; then
 	switch_to
 else
 	tmux new-session -ds "$selected_name" -c "$selected"
+	tmux-init "$selected_name" "$selected"
 	switch_to
-	tmux send-keys -t "$selected_name" "tmux-init" ^M
 fi

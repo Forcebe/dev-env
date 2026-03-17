@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+session=$1
+
+tmux rename-window -t "=$session:0" "tmrw-dev"
+pane=$(tmux list-panes -t "=$session:0" -F '#{pane_id}' | head -1)
+tmux send-keys -t "$pane" "nvim ." Enter
+new_pane=$(tmux split-window -v -t "$pane" -PF '#{pane_id}')
+bottom_right=$(tmux split-window -h -t "$new_pane" -PF '#{pane_id}')
+tmux send-keys -t "$bottom_right" "claude" Enter
+tmux select-pane -t "$pane"
+
+tmux new-window -t "=$session" -n "core-run" -c "$HOME/tmrw/tmrw-core-api"
+tmux new-window -t "=$session" -n "oracle-run" -c "$HOME/tmrw/tmrw-protocols"
+tmux new-window -t "=$session" -n "atlas-run" -c "$HOME/tmrw/tmrw-client"
+
+tmux select-window -t "=$session:tmrw-dev"
