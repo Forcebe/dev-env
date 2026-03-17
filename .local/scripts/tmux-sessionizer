@@ -1,27 +1,6 @@
 #!/usr/bin/env bash
 
-PERSONAL_DIR=~/personal
-TMRW_DIR=~/tmrw
-
-# Determine search directory
-search_dir=""
-cwd=$(pwd)
-
-if [[ "$cwd" == "$PERSONAL_DIR"* ]]; then
-	search_dir="$PERSONAL_DIR"
-elif [[ "$cwd" == "$TMRW_DIR"* ]]; then
-	search_dir="$TMRW_DIR"
-else
-	while getopts "tp" opt; do
-		case $opt in
-			t) search_dir="$TMRW_DIR" ;;
-			p) search_dir="$PERSONAL_DIR" ;;
-		esac
-	done
-	search_dir="${search_dir:-$TMRW_DIR}"
-fi
-
-selected=$(find "$search_dir" -mindepth 1 -maxdepth 1 -type d | fzf)
+selected=$({ echo ~/tmrw; find ~/personal ~/tmrw -mindepth 1 -maxdepth 1 -type d; } 2>/dev/null | fzf)
 
 if [[ -z "$selected" ]]; then
 	exit 0
