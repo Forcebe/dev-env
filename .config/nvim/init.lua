@@ -224,8 +224,10 @@ require('lazy').setup({
       -- Document existing key chains
       spec = {
         { '<leader>s', group = '[S]earch', mode = { 'n', 'v' } },
-        { '<leader>t', group = '[T]oggle' },
+        { '<leader>t', group = '[T]oggle / [T]est' },
         { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } }, -- Enable gitsigns recommended keymaps first
+        { '<leader>x', group = 'Diagnostics (Trouble)' },
+        { '<leader>p', group = '[P]ackage Info' },
         { 'gr', group = 'LSP Actions', mode = { 'n' } },
       },
     },
@@ -516,7 +518,22 @@ require('lazy').setup({
         --    https://github.com/pmizio/typescript-tools.nvim
         --
         -- But for many setups, the LSP (`ts_ls`) will work just fine
-        ts_ls = {},
+        -- vtsls is the recommended TS LSP (LazyVim default, better LSP protocol support than ts_ls)
+        vtsls = {},
+
+        -- ESLint LSP for real-time linting diagnostics and code actions
+        eslint = {
+          settings = {
+            -- Auto-fix on save (ESLint issues like unused imports, etc.)
+            codeActionOnSave = {
+              enable = true,
+              mode = 'all',
+            },
+          },
+        },
+
+        -- Tailwind CSS LSP for class completions, hover previews, and diagnostics
+        tailwindcss = {},
 
         stylua = {}, -- Used to format Lua code
 
@@ -559,7 +576,8 @@ require('lazy').setup({
       -- You can press `g?` for help in this menu.
       local ensure_installed = vim.tbl_keys(servers or {})
       vim.list_extend(ensure_installed, {
-        -- You can add other tools here that you want Mason to install
+        'prettierd', -- Fast Prettier daemon for formatting
+        'prettier', -- Fallback formatter
       })
 
       require('mason-tool-installer').setup { ensure_installed = ensure_installed }
@@ -596,18 +614,24 @@ require('lazy').setup({
           return nil
         else
           return {
-            timeout_ms = 500,
+            timeout_ms = 3000,
             lsp_format = 'fallback',
           }
         end
       end,
       formatters_by_ft = {
         lua = { 'stylua' },
-        -- Conform can also run multiple formatters sequentially
-        -- python = { "isort", "black" },
-        --
-        -- You can use 'stop_after_first' to run the first available formatter from the list
-        -- javascript = { "prettierd", "prettier", stop_after_first = true },
+        javascript = { 'prettierd', 'prettier', stop_after_first = true },
+        javascriptreact = { 'prettierd', 'prettier', stop_after_first = true },
+        typescript = { 'prettierd', 'prettier', stop_after_first = true },
+        typescriptreact = { 'prettierd', 'prettier', stop_after_first = true },
+        css = { 'prettierd', 'prettier', stop_after_first = true },
+        html = { 'prettierd', 'prettier', stop_after_first = true },
+        json = { 'prettierd', 'prettier', stop_after_first = true },
+        jsonc = { 'prettierd', 'prettier', stop_after_first = true },
+        yaml = { 'prettierd', 'prettier', stop_after_first = true },
+        markdown = { 'prettierd', 'prettier', stop_after_first = true },
+        graphql = { 'prettierd', 'prettier', stop_after_first = true },
       },
     },
   },
@@ -629,15 +653,16 @@ require('lazy').setup({
           return 'make install_jsregexp'
         end)(),
         dependencies = {
-          -- `friendly-snippets` contains a variety of premade snippets.
+          -- `friendly-snippets` contains a variety of premade snippets
+          -- including React, TypeScript, JavaScript, HTML, CSS, and more.
           --    See the README about individual language/framework/plugin snippets:
           --    https://github.com/rafamadriz/friendly-snippets
-          -- {
-          --   'rafamadriz/friendly-snippets',
-          --   config = function()
-          --     require('luasnip.loaders.from_vscode').lazy_load()
-          --   end,
-          -- },
+          {
+            'rafamadriz/friendly-snippets',
+            config = function()
+              require('luasnip.loaders.from_vscode').lazy_load()
+            end,
+          },
         },
         opts = {},
       },
@@ -686,7 +711,15 @@ require('lazy').setup({
       },
 
       sources = {
-        default = { 'lsp', 'path', 'snippets' },
+        default = { 'lsp', 'path', 'snippets', 'copilot' },
+        providers = {
+          copilot = {
+            name = 'copilot',
+            module = 'blink-copilot',
+            score_offset = 100, -- Show copilot suggestions first
+            async = true,
+          },
+        },
       },
 
       snippets = { preset = 'luasnip' },
@@ -821,7 +854,12 @@ require('lazy').setup({
     branch = 'main',
     -- [[ Configure Treesitter ]] See `:help nvim-treesitter-intro`
     config = function()
-      local parsers = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' }
+      local parsers = {
+        'bash', 'c', 'css', 'diff', 'dockerfile', 'graphql', 'html',
+        'javascript', 'json', 'jsonc', 'lua', 'luadoc', 'markdown',
+        'markdown_inline', 'query', 'regex', 'tsx', 'typescript',
+        'vim', 'vimdoc', 'yaml',
+      }
       require('nvim-treesitter').install(parsers)
       vim.api.nvim_create_autocmd('FileType', {
         callback = function(args)
@@ -867,7 +905,7 @@ require('lazy').setup({
   --    This is the easiest way to modularize your config.
   --
   --  Uncomment the following line and add your plugins to `lua/custom/plugins/*.lua` to get going.
-  -- { import = 'custom.plugins' },
+  { import = 'custom.plugins' },
   --
   -- For additional information with loading, sourcing and examples see `:help lazy.nvim-🔌-plugin-spec`
   -- Or use telescope!
