@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+script_dir=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
+filter=""
+export DRY="${DRY:-0}"
+
+while [[ $# > 0 ]]; do
+	if [[ "$1" == "--dry" ]]; then
+		DRY="1"
+	else
+		filter="$1"
+	fi
+	shift
+done
+
+# Run full personal base first (no filter — always run everything)
+if [[ "$DRY" == "1" ]]; then
+	"$script_dir/run" --dry
+else
+	"$script_dir/run"
+fi
+
+echo ""
+echo "========== Setting up work environment =========="
+
+# Manual steps collection
+export MANUAL_STEPS_FILE
+MANUAL_STEPS_FILE=$(mktemp)
+trap 'rm -f "$MANUAL_STEPS_FILE"' EXIT
+
+source "$script_dir/runs/_lib.sh"
+
+# Collect work scripts
+work_scripts=()
+cd "$script_dir"
+for script_path in runs-work/*; do
+	[[ -f "$script_path" ]] || continue
+	name=$(basename "$script_path")
+	case "$name" in _*) continue ;; esac
+	work_scripts+=("$name")
+done
+
+# Apply filter if given
+if [[ -n "$filter" ]]; then
+	matched=()
+	for name in "${work_scripts[@]}"; do
+		if [[ "$name" == "$filter" ]]; then
+			matched+=("$name")
+		fi
+	done
+	work_scripts=("${matched[@]}")
+fi
+
+if [[ "$DRY" == "1" ]]; then
+	echo ""
+	echo "Work scripts: ${work_scripts[*]}"
+fi
+
+for name in "${work_scripts[@]}"; do
+	echo ""
+	echo "--- $name ---"
+	if [[ "$DRY" == "1" ]]; then
+		DRY=1 source "./runs-work/$name"
+	else
+		source "./runs-work/$name"
+	fi
+done
+
+# --- Manual steps summary ---
+if [[ -s "$MANUAL_STEPS_FILE" ]]; then
+	echo ""
+	echo "========== Manual Steps =========="
+	step_num=1
+	while IFS= read -r line; do
+		echo "  $step_num. $line"
+		step_num=$((step_num + 1))
+	done < "$MANUAL_STEPS_FILE"
+fi

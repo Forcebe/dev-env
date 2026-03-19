@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# DEPS: homebrew
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/../runs/_lib.sh"
+
+log_section "PostgreSQL"
+brew_install postgresql@17

@@ -52,23 +52,4 @@ copy_file home/.gitconfig $HOME
 log_section "ready-tmux scripts"
 log_step "Copying .ready-tmux"
 copy_file home/.ready-tmux $HOME
-if [[ -d "$HOME/tmrw" ]]; then
-	log_step "cp tmrw/tmrw.ready-tmux -> ~/tmrw/.ready-tmux"
-	if [[ "$DRY" == "0" ]]; then
-		cp "$script_dir/tmrw/tmrw.ready-tmux" "$HOME/tmrw/.ready-tmux"
-	fi
-fi
-for repo in tmrw-client tmrw-protocols tmrw-core-api; do
-	repo_dir="$HOME/tmrw/$repo"
-	if [[ -d "$repo_dir" ]]; then
-		log_step "cp tmrw/$repo.ready-tmux -> ~/tmrw/$repo/.ready-tmux"
-		if [[ "$DRY" == "0" ]]; then
-			cp "$script_dir/tmrw/$repo.ready-tmux" "$repo_dir/.ready-tmux"
-		fi
-		exclude="$repo_dir/.git/info/exclude"
-		if [[ -f "$exclude" ]] && ! grep -q '\.ready-tmux' "$exclude"; then
-			echo ".ready-tmux" >> "$exclude"
-		fi
-	fi
-done
 

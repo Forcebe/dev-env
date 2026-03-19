@@ -49,7 +49,4 @@ else
 	fi
 fi
 
-log_section "PostgreSQL"
-brew_install postgresql@17
-
 log_manual "Run 'source ~/.zshrc' or open a new terminal to pick up changes"

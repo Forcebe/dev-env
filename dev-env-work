@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+
+script_dir="$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)"
+export DRY="${DRY:-0}"
+
+# Support standalone invocation with --dry flag
+while [[ $# > 0 ]]; do
+    if [[ "$1" == "--dry" ]]; then
+        export DRY="1"
+    fi
+    shift
+done
+
+# Deploy personal configs first
+if [[ "$DRY" == "1" ]]; then
+    "$script_dir/dev-env" --dry
+else
+    "$script_dir/dev-env"
+fi
+
+echo ""
+echo "========== Setting up work environment =========="
+
+source "$script_dir/runs/_lib.sh"
+
+copy_dir() {
+	local from=$1
+	local to=$2
+
+	pushd $from > /dev/null
+	dirs=$(find . -maxdepth 1 -mindepth 1 -type d)
+	for dir in $dirs; do
+		execute rm -rf $to/$dir
+		execute cp -r $dir $to/$dir
+	done
+	files=$(find . -maxdepth 1 -mindepth 1 -type f)
+	for file in $files; do
+		execute cp $file $to/$file
+	done
+	popd > /dev/null
+}
+
+copy_file() {
+	local from=$1
+	local to=$2
+	local name=$(basename $from)
+
+	execute rm -f $to/$name
+	execute cp $from $to/$name
+}
+
+log_section "Work config overlays"
+log_step "Copying work .gitconfig"
+copy_file home-work/.gitconfig $HOME
+log_step "Copying work .claude"
+copy_dir home-work/.claude $HOME/.claude
+log_step "Copying work .local"
+copy_dir home-work/.local $HOME/.local
+
+log_section "TMRW ready-tmux scripts"
+if [[ -d "$HOME/tmrw" ]]; then
+	log_step "cp tmrw/tmrw.ready-tmux -> ~/tmrw/.ready-tmux"
+	if [[ "$DRY" == "0" ]]; then
+		cp "$script_dir/tmrw/tmrw.ready-tmux" "$HOME/tmrw/.ready-tmux"
+	fi
+fi
+for repo in tmrw-client tmrw-protocols tmrw-core-api; do
+	repo_dir="$HOME/tmrw/$repo"
+	if [[ -d "$repo_dir" ]]; then
+		log_step "cp tmrw/$repo.ready-tmux -> ~/tmrw/$repo/.ready-tmux"
+		if [[ "$DRY" == "0" ]]; then
+			cp "$script_dir/tmrw/$repo.ready-tmux" "$repo_dir/.ready-tmux"
+		fi
+		exclude="$repo_dir/.git/info/exclude"
+		if [[ -f "$exclude" ]] && ! grep -q '\.ready-tmux' "$exclude"; then
+			echo ".ready-tmux" >> "$exclude"
+		fi
+	fi
+done
