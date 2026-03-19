@@ -25,6 +25,9 @@ fi
 log_section "parallel"
 brew_install parallel
 
+log_section "shellcheck"
+brew_install shellcheck
+
 # ===== CLI apps =====
 
 log_section "GitHub CLI"
