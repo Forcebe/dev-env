@@ -50,6 +50,13 @@ addToPath $HOME/.local/bin
 
 
 # Aliases
+# General
+alias cat='bat'
+alias find='fd'
+alias ll='ls -la'
+alias ..='cd ..'
+alias ...='cd ../..'
+
 # Git Aliases
 alias g='git'
 alias ga='git add'
@@ -74,6 +81,7 @@ alias gcmsg='git commit --message'
 alias gc='git commit --verbose'
 alias gca='git commit --verbose --all'
 alias gd='git diff'
+alias gdc='git diff --cached'
 alias gfo='git fetch origin'
 alias ghh='git help'
 alias gm='git merge'
@@ -82,6 +90,7 @@ alias gmc='git merge --continue'
 alias gms="git merge --squash"
 alias gmff="git merge --ff-only"
 alias gl='git pull'
+alias glog='git log --oneline --graph'
 alias gpr='git pull --rebase'
 alias gp='git push'
 alias gpd='git push --dry-run'
@@ -155,7 +164,7 @@ _git_alias_complete() {
 }
 
 for cmd in g ga gaa gbs gbl gb gba gbd gbD gbm gbr gco gcb gcB gcp gcpa gcpc \
-  gclean gcam gcmsg gc gca gd gfo ghh gm gma gmc gms gmff gl gpr gp gpd \
+  gclean gcam gcmsg gc gca gd gdc gfo ghh glog gm gma gmc gms gmff gl gpr gp gpd \
   grb grba grbc grbi grbo grbs grf gstall gstaa gstc gstd gstl gstp gsta gst \
   gwt gwta gwtls gwtmv gwtrm; do
   compdef _git_alias_complete "$cmd"
