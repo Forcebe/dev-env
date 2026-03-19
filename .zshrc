@@ -137,6 +137,30 @@ alias npmrd="npm run dev"
 # Run npm run build
 alias npmrb="npm run build"
 
+# Completion
+# Include Homebrew completions (must be before compinit)
+if type brew &>/dev/null; then
+  FPATH="$(brew --prefix)/share/zsh/site-functions:${FPATH}"
+fi
+autoload -Uz compinit && compinit
+
+# Git-aware completions for aliases
+# Expands the alias (e.g. gco -> git checkout) then delegates to _git
+_git_alias_complete() {
+  local -a alias_words
+  alias_words=("${(z)aliases[$words[1]]}")
+  words=("${alias_words[@]}" "${words[@]:1}")
+  (( CURRENT += ${#alias_words} - 1 ))
+  service=git _git
+}
+
+for cmd in g ga gaa gbs gbl gb gba gbd gbD gbm gbr gco gcb gcB gcp gcpa gcpc \
+  gclean gcam gcmsg gc gca gd gfo ghh gm gma gmc gms gmff gl gpr gp gpd \
+  grb grba grbc grbi grbo grbs grf gstall gstaa gstc gstd gstl gstp gsta gst \
+  gwt gwta gwtls gwtmv gwtrm; do
+  compdef _git_alias_complete "$cmd"
+done
+
 # Function calls
 # Run starship prompt
 eval "$(starship init zsh)"

@@ -68,6 +68,12 @@ vim.o.scrolloff = 10
 -- See `:help 'confirm'`
 vim.o.confirm = true
 
+-- Auto-reload files changed outside of neovim (e.g. git branch switches)
+vim.o.autoread = true
+vim.api.nvim_create_autocmd({ 'FocusGained', 'BufEnter', 'CursorHold' }, {
+  command = 'silent! checktime',
+})
+
 -- [[ Basic Keymaps ]]
 --  See `:help vim.keymap.set()`
 
