@@ -1,0 +1,7 @@
+[user]
+	name = Nick Mather
+	email = nick@startmytomorrow.com
+[push]
+	autoSetupRemote = true
+[fetch]
+	prune = true
