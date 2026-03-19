@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# ====== Claude Code install, config & plugins ======
+
+# Install or update Claude Code
+if claude --version &>/dev/null; then
+  echo "Claude Code already installed, updating"
+  claude update
+else
+  echo "installing Claude Code CLI"
+  curl -fsSL https://claude.ai/install.sh | bash
+fi
+
+# Clone or update personal claude config (agents & skills)
+claude_config_dir="$HOME/.claude/claude-config"
+if [[ -d "$claude_config_dir" ]]; then
+  echo "pulling latest claude-config"
+  git -C "$claude_config_dir" pull --quiet
+else
+  echo "cloning claude-config"
+  git clone --quiet https://github.com/Forcebe/claude-config.git "$claude_config_dir"
+fi
+
+# Symlink agents and skills into ~/.claude/
+ln -sfn "$claude_config_dir/agents" "$HOME/.claude/agents"
+ln -sfn "$claude_config_dir/skills" "$HOME/.claude/skills"
+echo "linked agents/ and skills/ -> ~/.claude/"
+
+echo "Claude Code config complete — run /reload-plugins in Claude to pick up changes"

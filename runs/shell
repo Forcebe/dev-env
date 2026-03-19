@@ -31,15 +31,6 @@ else
   gh auth login
 fi
 
-# claude code
-if claude --version &>/dev/null; then
-  echo "Claude Code already installed, updating"
-  claude update
-else
-  echo "installing Claude Code CLI"
-  curl -fsSL https://claude.ai/install.sh | bash
-fi
-
 # starship prompt
 curl -sS https://starship.rs/install.sh | sh
 

@@ -57,17 +57,18 @@ copy_file() {
 
 log ""
 log "--- copying config dirs ---"
-copy_dir .config $HOME/.config
-copy_dir .local $HOME/.local
+copy_dir home/.config $HOME/.config
+copy_dir home/.local $HOME/.local
+copy_dir home/.claude $HOME/.claude
 
 log ""
 log "--- copying config files ---"
-copy_file .zshrc $HOME
-copy_file .gitconfig $HOME
+copy_file home/.zshrc $HOME
+copy_file home/.gitconfig $HOME
 
 log ""
 log "--- copying ready-tmux scripts ---"
-copy_file .ready-tmux $HOME
+copy_file home/.ready-tmux $HOME
 if [[ -d "$HOME/tmrw" ]]; then
 	log "cp tmrw/tmrw.ready-tmux -> ~/tmrw/.ready-tmux"
 	if [[ $dry == "0" ]]; then

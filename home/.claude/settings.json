@@ -1,0 +1,22 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "bash /Users/nickmather/.claude/statusline-command.sh"
+  },
+  "voiceEnabled": true,
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "plugin-dev@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "tmrw-standards@tmrw-tools": true
+  },
+  "extraKnownMarketplaces": {
+    "tmrw-tools": {
+      "source": {
+        "source": "github",
+        "repo": "tmrw-health/claude-plugins"
+      }
+    }
+  }
+}
