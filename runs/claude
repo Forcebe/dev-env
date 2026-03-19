@@ -11,7 +11,7 @@ else
 fi
 
 # Clone or update personal claude config (agents & skills)
-claude_config_dir="$HOME/.claude/claude-config"
+claude_config_dir="$HOME/personal/claude-config"
 if [[ -d "$claude_config_dir" ]]; then
   echo "pulling latest claude-config"
   git -C "$claude_config_dir" pull --quiet
