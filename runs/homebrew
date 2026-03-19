@@ -1,8 +1,25 @@
 #!/usr/bin/env bash
+# DEPS:
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
-echo "installing homebrew"
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+log_section "Homebrew"
+if command -v brew &>/dev/null; then
+	log_skip "Already installed"
+else
+	log_step "Installing Homebrew"
+	execute /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
 
-echo >> ~/.zprofile
-echo 'eval "$(/opt/homebrew/bin/brew shellenv zsh)"' >> ~/.zprofile
-eval "$(/opt/homebrew/bin/brew shellenv zsh)"
+log_section ".zprofile"
+if grep -q 'brew shellenv' ~/.zprofile 2>/dev/null; then
+	log_skip "brew shellenv already present"
+else
+	log_step "Adding brew shellenv to ~/.zprofile"
+	if [[ "$DRY" == "0" ]]; then
+		echo >> ~/.zprofile
+		echo 'eval "$(/opt/homebrew/bin/brew shellenv zsh)"' >> ~/.zprofile
+	fi
+fi
+
+# Always eval to ensure brew is on PATH for subsequent scripts
+eval "$(/opt/homebrew/bin/brew shellenv zsh)" 2>/dev/null || true

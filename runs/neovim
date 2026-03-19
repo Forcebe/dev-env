@@ -1,25 +1,28 @@
 #!/usr/bin/env bash
+# DEPS: homebrew, dev-env
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
 NEOVIM_VERSION="0.11.6"
 
-echo "cloning neovim repository @v$NEOVIM_VERSION"
-git clone -b v$NEOVIM_VERSION git@github.com:neovim/neovim.git ~/personal/neovim
+log_section "Neovim source"
+clone_or_pull git@github.com:neovim/neovim.git ~/personal/neovim "v$NEOVIM_VERSION"
 
-echo "installing neovim build dependancies with homebrew"
-brew install ninja cmake gettext curl git
+log_section "Build dependencies"
+brew_install ninja cmake gettext curl git
 
-echo "building neovim from source"
-cd ~/personal/neovim
-make CMAKE_BUILD_TYPE=RelWithDebInfo
-sudo make install
+log_section "Build & install"
+installed_version=$(nvim --version 2>/dev/null | head -1 | sed 's/NVIM v//')
+if [[ "$installed_version" == "$NEOVIM_VERSION" ]]; then
+	log_skip "Neovim v$NEOVIM_VERSION already installed"
+else
+	log_step "Building neovim from source"
+	if [[ "$DRY" == "0" ]]; then
+		cd ~/personal/neovim
+		make CMAKE_BUILD_TYPE=RelWithDebInfo
+		sudo make install
+		cd - > /dev/null
+	fi
+fi
 
-## Dependancies as reccomended by https://github.com/nvim-lua/kickstart.nvim
-echo "installing config dependancies"
-echo "ripgrep- fast command line search tool"
-brew install ripgrep
-
-echo "fd- find alternative with opinionated defaults"
-brew install fd
-
-echo "tree-sitter cli - allows tree-sitter parser garammars on the command line"
-brew install tree-sitter-cli
+log_section "Config dependencies"
+brew_install ripgrep fd tree-sitter-cli

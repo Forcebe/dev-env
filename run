@@ -1,50 +1,158 @@
- #!/usr/bin/env bash
+#!/usr/bin/env bash
 
 script_dir=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
 filter=""
-dry="0"
+export DRY="0"
 
 while [[ $# > 0 ]]; do
 	if [[ "$1" == "--dry" ]]; then
-		dry="1"
+		DRY="1"
 	else
 		filter="$1"
 	fi
 	shift
 done
 
-log() {
-	if [[ $dry == "1" ]]; then
-		echo "[DRY_RUN]: $@"
+# Manual steps collection
+export MANUAL_STEPS_FILE
+MANUAL_STEPS_FILE=$(mktemp)
+trap 'rm -f "$MANUAL_STEPS_FILE"' EXIT
+
+# --- Dependency resolution ---
+# Store scripts and deps as parallel arrays (bash 3.2 compatible)
+# script_names[i] corresponds to script_dep_list[i]
+
+script_names=()
+script_dep_list=()
+
+cd "$script_dir"
+for script_path in runs/*; do
+	[[ -f "$script_path" ]] || continue
+	name=$(basename "$script_path")
+	# Skip _-prefixed files (_lib.sh etc)
+	case "$name" in _*) continue ;; esac
+
+	script_names+=("$name")
+
+	# Parse # DEPS: header
+	deps_line=$(grep -m1 '^# DEPS:' "$script_path" 2>/dev/null || true)
+	if [[ -n "$deps_line" ]]; then
+		deps="${deps_line#\# DEPS:}"
+		deps="$(echo "$deps" | sed 's/,/ /g' | xargs)"
+		script_dep_list+=("$deps")
 	else
-		echo "$@"
+		script_dep_list+=("")
+	fi
+done
+
+# Lookup helpers for parallel arrays
+get_index() {
+	local target="$1"
+	local i
+	for i in "${!script_names[@]}"; do
+		if [[ "${script_names[$i]}" == "$target" ]]; then
+			echo "$i"
+			return
+		fi
+	done
+	echo "-1"
+}
+
+get_deps() {
+	local idx
+	idx=$(get_index "$1")
+	if [[ "$idx" != "-1" ]]; then
+		echo "${script_dep_list[$idx]}"
 	fi
 }
 
+# Topological sort using depth-first search
+# Track state in space-separated strings (bash 3.2 compatible)
+_visit_done=""
+_visit_in_progress=""
+sorted_order=()
 
-execute() {
-	log "execute: $@"
-	if [[ $dry == "1" ]]; then
-		return
-	fi
+visit() {
+	local node="$1"
+	# Already done?
+	case " $_visit_done " in *" $node "*) return ;; esac
+	# Cycle detection
+	case " $_visit_in_progress " in
+		*" $node "*)
+			echo "ERROR: circular dependency involving $node" >&2
+			exit 1
+			;;
+	esac
 
-	"$@"
+	_visit_in_progress="$_visit_in_progress $node"
+
+	local deps
+	deps=$(get_deps "$node")
+	for dep in $deps; do
+		visit "$dep"
+	done
+
+	_visit_in_progress="${_visit_in_progress% $node}"
+	_visit_done="$_visit_done $node"
+	sorted_order+=("$node")
 }
 
-if [[ $dry == "1" ]]; then
-	echo "--------- [DRY_RUN] run ---------"
+# Determine which scripts to run
+if [[ -n "$filter" ]]; then
+	# Collect transitive deps for the filtered script
+	_needed=""
+	collect_deps() {
+		local node="$1"
+		case " $_needed " in *" $node "*) return ;; esac
+		_needed="$_needed $node"
+		local deps
+		deps=$(get_deps "$node")
+		for dep in $deps; do
+			collect_deps "$dep"
+		done
+	}
+	collect_deps "$filter"
+
+	# Topologically sort only the needed scripts
+	for name in "${script_names[@]}"; do
+		case " $_needed " in *" $name "*) visit "$name" ;; esac
+	done
 else
-	echo "--------- run ---------"
+	for name in "${script_names[@]}"; do
+		visit "$name"
+	done
 fi
 
-cd $script_dir
-scripts=$(find runs -maxdepth 1 -mindepth 1 -type f)
+# --- Execution ---
 
-for script in $scripts; do
-	if echo "$script" | grep -qv "$filter"; then
-		log "filtering $script"
-		continue
+# Source shared library so all child scripts have access to helpers
+source "$script_dir/runs/_lib.sh"
+
+if [[ "$DRY" == "1" ]]; then
+	echo "========== Setting up environment (dry run) =========="
+	echo ""
+	echo "Execution order: ${sorted_order[*]}"
+else
+	echo "========== Setting up environment =========="
+fi
+
+for name in "${sorted_order[@]}"; do
+	echo ""
+	echo "--- $name ---"
+	if [[ "$DRY" == "1" ]]; then
+		DRY=1 source "./runs/$name"
+	else
+		source "./runs/$name"
 	fi
-
-	execute ./$script
 done
+
+# --- Manual steps summary ---
+if [[ -s "$MANUAL_STEPS_FILE" ]]; then
+	echo ""
+	echo "========== Manual Steps =========="
+	step_num=1
+	while IFS= read -r line; do
+		echo "  $step_num. $line"
+		step_num=$((step_num + 1))
+	done < "$MANUAL_STEPS_FILE"
+fi

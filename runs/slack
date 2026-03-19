@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
+# DEPS: homebrew
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
-echo "installing slack with Homebrew"
-
-brew install --cask slack
+log_section "Slack"
+brew_cask_install slack

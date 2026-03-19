@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
+# DEPS: homebrew, dev-env
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
-echo "installing ghostty with Homebrew"
-brew install --cask ghostty
+log_section "Ghostty"
+brew_cask_install ghostty
 
-echo "installing tmux with Homebrew"
-brew install tmux
+log_section "tmux"
+brew_install tmux
 
-echo "installing tmux plugin manager"
-git clone https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+log_section "Tmux Plugin Manager"
+clone_or_pull https://github.com/tmux-plugins/tpm ~/.tmux/plugins/tpm
+
+log_manual "Run 'prefix + I' in tmux to install plugins"

@@ -1,41 +1,55 @@
 #!/usr/bin/env bash
-# ====== Utils/CLI tools ======= 
-# FZF for fuzzy finding on anything you pass in
-echo "cloning FZF and running install script"
-git clone git@github.com:junegunn/fzf.git $HOME/personal/fzf
-$HOME/personal/fzf/install --all
+# DEPS: homebrew, dev-env
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
-# bat syntax highlighted cat
-echo "installing bat- syntax highlighed cat alternative"
-brew install bat
+# ====== Utils/CLI tools =======
 
-# NVM - Node version manager
-echo "installing NVM - node version manager"
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+log_section "FZF"
+clone_or_pull git@github.com:junegunn/fzf.git "$HOME/personal/fzf"
+log_step "Running FZF install script"
+execute "$HOME/personal/fzf/install" --all
 
-# Parallel - tool to run commands in parallel
-echo "installing parallel"
-brew install parallel
+log_section "bat"
+brew_install bat
 
-# ===== CLI apps =====
-# Github cli
-echo "installing github cli & running login"
-brew install gh
-
-# Check if we are already logged in
-active_hosts=$(gh auth status --active --json hosts --jq '.hosts | add | map(select(.active)) | length' 2>/dev/null || echo 0)
-# Log in to github if we aren't logged in yet
-if [ "$active_hosts" -gt 0 ]; then
-  echo "already logged in to GitHub CLI, skipping auth login"
+log_section "NVM"
+if [[ -d "$HOME/.nvm" ]]; then
+	log_skip "Already installed"
 else
-  gh auth login
+	log_step "Installing NVM"
+	if [[ "$DRY" == "0" ]]; then
+		curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+	fi
 fi
 
-# starship prompt
-curl -sS https://starship.rs/install.sh | sh
+log_section "parallel"
+brew_install parallel
 
-# postgresql @17 for TMRW core
-brew install postgresql@17
+# ===== CLI apps =====
 
-# remind user to reload shell
-echo "Run 'source ~/.zshrc' or open a new terminal to pick up changes"
+log_section "GitHub CLI"
+brew_install gh
+active_hosts=$(gh auth status --active --json hosts --jq '.hosts | add | map(select(.active)) | length' 2>/dev/null || echo 0)
+if [ "$active_hosts" -gt 0 ]; then
+	log_skip "Already logged in"
+else
+	log_step "Logging in to GitHub CLI"
+	if [[ "$DRY" == "0" ]]; then
+		gh auth login
+	fi
+fi
+
+log_section "Starship"
+if command -v starship &>/dev/null; then
+	log_skip "Already installed"
+else
+	log_step "Installing starship prompt"
+	if [[ "$DRY" == "0" ]]; then
+		curl -sS https://starship.rs/install.sh | sh -s -- -y
+	fi
+fi
+
+log_section "PostgreSQL"
+brew_install postgresql@17
+
+log_manual "Run 'source ~/.zshrc' or open a new terminal to pick up changes"

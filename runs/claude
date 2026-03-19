@@ -1,28 +1,23 @@
 #!/usr/bin/env bash
-# ====== Claude Code install, config & plugins ======
+# DEPS:
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
-# Install or update Claude Code
+log_section "Claude Code"
 if claude --version &>/dev/null; then
-  echo "Claude Code already installed, updating"
-  claude update
+	log_skip "Already installed, updating"
+	execute claude update
 else
-  echo "installing Claude Code CLI"
-  curl -fsSL https://claude.ai/install.sh | bash
+	log_step "Installing Claude Code CLI"
+	if [[ "$DRY" == "0" ]]; then
+		curl -fsSL https://claude.ai/install.sh | bash
+	fi
 fi
 
-# Clone or update personal claude config (agents & skills)
+log_section "claude-config"
 claude_config_dir="$HOME/personal/claude-config"
-if [[ -d "$claude_config_dir" ]]; then
-  echo "pulling latest claude-config"
-  git -C "$claude_config_dir" pull --quiet
-else
-  echo "cloning claude-config"
-  git clone --quiet https://github.com/Forcebe/claude-config.git "$claude_config_dir"
-fi
+clone_or_pull https://github.com/Forcebe/claude-config.git "$claude_config_dir"
+log_step "Linking agents/ and skills/ -> ~/.claude/"
+execute ln -sfn "$claude_config_dir/agents" "$HOME/.claude/agents"
+execute ln -sfn "$claude_config_dir/skills" "$HOME/.claude/skills"
 
-# Symlink agents and skills into ~/.claude/
-ln -sfn "$claude_config_dir/agents" "$HOME/.claude/agents"
-ln -sfn "$claude_config_dir/skills" "$HOME/.claude/skills"
-echo "linked agents/ and skills/ -> ~/.claude/"
-
-echo "Claude Code config complete — run /reload-plugins in Claude to pick up changes"
+log_manual "Run /reload-plugins in Claude Code to pick up changes"

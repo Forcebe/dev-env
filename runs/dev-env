@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# DEPS:
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
+
+_runs_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+
+if [[ "$DRY" == "1" ]]; then
+	execute "$_runs_dir/../dev-env" --dry
+else
+	"$_runs_dir/../dev-env"
+fi

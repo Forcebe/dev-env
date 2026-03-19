@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# DEPS: homebrew
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
-# Install Orbstack for Docker
-brew install orbstack
+log_section "OrbStack"
+brew_install orbstack

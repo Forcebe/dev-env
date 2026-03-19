@@ -1,37 +1,20 @@
 #!/usr/bin/env bash
 
 script_dir="$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)"
-dry="0"
 
+# Support standalone invocation with --dry flag
 while [[ $# > 0 ]]; do
     if [[ "$1" == "--dry" ]]; then
-        dry="1"
+        export DRY="1"
     fi
     shift
 done
 
-log() {
-    if [[ $dry == "1" ]]; then
-        echo "[DRY_RUN]: $@"
-    else
-        echo "$@"
-    fi
-}
-
-execute() {
-    log "execute: $@"
-    if [[ $dry == "1" ]]; then
-        return
-    fi
-
-    "$@"
-}
-
-log "--------- dev-env ---------"
+source "$script_dir/runs/_lib.sh"
 
 copy_dir() {
-	from=$1
-	to=$2
+	local from=$1
+	local to=$2
 
 	pushd $from > /dev/null
 	dirs=$(find . -maxdepth 1 -mindepth 1 -type d)
@@ -47,39 +30,39 @@ copy_dir() {
 }
 
 copy_file() {
-	from=$1
-	to=$2
-	name=$(basename $from)
+	local from=$1
+	local to=$2
+	local name=$(basename $from)
 
-	execute rm $to/$name
+	execute rm -f $to/$name
 	execute cp $from $to/$name
 }
 
-log ""
-log "--- copying config dirs ---"
+log_section "Config dirs"
+log_step "Copying .config, .local, .claude"
 copy_dir home/.config $HOME/.config
 copy_dir home/.local $HOME/.local
 copy_dir home/.claude $HOME/.claude
 
-log ""
-log "--- copying config files ---"
+log_section "Config files"
+log_step "Copying .zshrc, .gitconfig"
 copy_file home/.zshrc $HOME
 copy_file home/.gitconfig $HOME
 
-log ""
-log "--- copying ready-tmux scripts ---"
+log_section "ready-tmux scripts"
+log_step "Copying .ready-tmux"
 copy_file home/.ready-tmux $HOME
 if [[ -d "$HOME/tmrw" ]]; then
-	log "cp tmrw/tmrw.ready-tmux -> ~/tmrw/.ready-tmux"
-	if [[ $dry == "0" ]]; then
+	log_step "cp tmrw/tmrw.ready-tmux -> ~/tmrw/.ready-tmux"
+	if [[ "$DRY" == "0" ]]; then
 		cp "$script_dir/tmrw/tmrw.ready-tmux" "$HOME/tmrw/.ready-tmux"
 	fi
 fi
 for repo in tmrw-client tmrw-protocols tmrw-core-api; do
 	repo_dir="$HOME/tmrw/$repo"
 	if [[ -d "$repo_dir" ]]; then
-		log "cp tmrw/$repo.ready-tmux -> ~/tmrw/$repo/.ready-tmux"
-		if [[ $dry == "0" ]]; then
+		log_step "cp tmrw/$repo.ready-tmux -> ~/tmrw/$repo/.ready-tmux"
+		if [[ "$DRY" == "0" ]]; then
 			cp "$script_dir/tmrw/$repo.ready-tmux" "$repo_dir/.ready-tmux"
 		fi
 		exclude="$repo_dir/.git/info/exclude"
@@ -89,5 +72,3 @@ for repo in tmrw-client tmrw-protocols tmrw-core-api; do
 	fi
 done
 
-log ""
-echo "Run 'source ~/.zshrc' and 'prefix + I' in tmux to finish setup"

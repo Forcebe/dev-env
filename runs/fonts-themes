@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
+# DEPS: homebrew
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
-echo "installing nerd fonts"
-brew install --cask font-terminess-ttf-nerd-font
-brew install --cask font-iosevka-term-slab-nerd-font
-brew install --cask font-fira-code-nerd-font
-
-
+log_section "Nerd Fonts"
+brew_cask_install font-terminess-ttf-nerd-font font-iosevka-term-slab-nerd-font font-fira-code-nerd-font
