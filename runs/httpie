@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# DEPS: dev-env, homebrew
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
+
+log_section "HTTPie CLI"
+brew_install httpie
+
+log_section "HTTPie Desktop"
+if [[ -d "/Applications/HTTPie.app" ]]; then
+	log_skip "Already installed"
+else
+	brew_cask_install httpie-desktop
+fi

@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# DEPS: dev-env
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
+
+log_section "Keyboard"
+log_step "Fast key repeat rate"
+execute defaults write NSGlobalDomain KeyRepeat -int 2
+log_step "Short delay until repeat"
+execute defaults write NSGlobalDomain InitialKeyRepeat -int 15
+log_step "Disable press-and-hold for accented characters"
+execute defaults write NSGlobalDomain ApplePressAndHoldEnabled -bool false
+
+log_section "Dock"
+log_step "Auto-hide the Dock"
+execute defaults write com.apple.dock autohide -bool true
+log_step "Remove auto-hide delay"
+execute defaults write com.apple.dock autohide-delay -float 0
+log_step "Fast hide/show animation"
+execute defaults write com.apple.dock autohide-time-modifier -float 0.2
+log_step "Don't show recent apps"
+execute defaults write com.apple.dock show-recents -bool false
+
+log_section "Finder"
+log_step "Show all file extensions"
+execute defaults write NSGlobalDomain AppleShowAllExtensions -bool true
+log_step "Show hidden files"
+execute defaults write com.apple.finder AppleShowAllFiles -bool true
+log_step "Show path bar"
+execute defaults write com.apple.finder ShowPathbar -bool true
+log_step "Show status bar"
+execute defaults write com.apple.finder ShowStatusBar -bool true
+log_step "Default to list view"
+execute defaults write com.apple.finder FXPreferredViewStyle -string "Nlsv"
+log_step "Disable extension change warning"
+execute defaults write com.apple.finder FXEnableExtensionChangeWarning -bool false
+log_step "Keep folders on top when sorting"
+execute defaults write com.apple.finder _FXSortFoldersFirst -bool true
+log_step "Search current folder by default"
+execute defaults write com.apple.finder FXDefaultSearchScope -string "SCcf"
+log_step "No .DS_Store on network/USB volumes"
+execute defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool true
+execute defaults write com.apple.desktopservices DSDontWriteUSBStores -bool true
+
+log_section "Text input"
+log_step "Disable auto-capitalize"
+execute defaults write NSGlobalDomain NSAutomaticCapitalizationEnabled -bool false
+log_step "Expand save panel by default"
+execute defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode -bool true
+execute defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode2 -bool true
+log_step "Expand print panel by default"
+execute defaults write NSGlobalDomain PMPrintingExpandedStateForPrint -bool true
+execute defaults write NSGlobalDomain PMPrintingExpandedStateForPrint2 -bool true
+log_step "Full keyboard access for all UI controls"
+execute defaults write NSGlobalDomain AppleKeyboardUIMode -int 3
+
+if [[ "$DRY" == "0" ]]; then
+	log_section "Applying changes"
+	log_step "Restarting Finder and Dock"
+	killall Finder 2>/dev/null || true
+	killall Dock 2>/dev/null || true
+	log_manual "Log out and back in for keyboard/trackpad changes to take effect"
+fi
