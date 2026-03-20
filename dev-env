@@ -2,13 +2,53 @@
 
 script_dir="$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)"
 
-# Support standalone invocation with --dry flag
-while [[ $# > 0 ]]; do
-    if [[ "$1" == "--dry" ]]; then
-        export DRY="1"
+# --- Layer resolution ---
+# When called via `run`, CURRENT_LAYER is already exported.
+# When called standalone, resolve from flags or layer file.
+if [[ -z "$CURRENT_LAYER" ]]; then
+    layer_flag=""
+    while [[ $# > 0 ]]; do
+        case "$1" in
+            --dry) export DRY="1" ;;
+            --work) layer_flag="work" ;;
+            --personal) layer_flag="personal" ;;
+        esac
+        shift
+    done
+
+    LAYER_FILE="$HOME/.dev-env-layer"
+    if [[ "${DRY:-0}" == "0" ]]; then
+        if [[ "$layer_flag" == "work" ]]; then
+            echo "work" > "$LAYER_FILE"
+        elif [[ "$layer_flag" == "personal" ]]; then
+            rm -f "$LAYER_FILE"
+        fi
     fi
-    shift
-done
+
+    # Resolve layer: flag overrides file
+    if [[ "$layer_flag" == "work" ]]; then
+        export CURRENT_LAYER="work"
+    elif [[ "$layer_flag" == "personal" ]]; then
+        export CURRENT_LAYER="personal"
+    elif [[ -f "$LAYER_FILE" ]]; then
+        export CURRENT_LAYER
+        CURRENT_LAYER=$(cat "$LAYER_FILE")
+        if [[ "$CURRENT_LAYER" != "work" && "$CURRENT_LAYER" != "personal" ]]; then
+            echo "WARNING: unknown layer '$CURRENT_LAYER' in $LAYER_FILE, defaulting to personal" >&2
+            export CURRENT_LAYER="personal"
+        fi
+    else
+        export CURRENT_LAYER="personal"
+    fi
+else
+    # Called via run — still parse --dry for standalone compat
+    while [[ $# > 0 ]]; do
+        case "$1" in
+            --dry) export DRY="1" ;;
+        esac
+        shift
+    done
+fi
 
 source "$script_dir/runs/_lib.sh"
 
@@ -20,11 +60,11 @@ copy_dir() {
 	dirs=$(find . -maxdepth 1 -mindepth 1 -type d)
 	for dir in $dirs; do
 		execute rm -rf $to/$dir
-		execute cp -r $dir $to/$dir
+		execute cp -rp $dir $to/$dir
 	done
 	files=$(find . -maxdepth 1 -mindepth 1 -type f)
 	for file in $files; do
-		execute cp $file $to/$file
+		execute cp -p $file $to/$file
 	done
 	popd > /dev/null
 }
@@ -38,6 +78,8 @@ copy_file() {
 	execute rm -f "$to/$name"
 	execute cp "$from" "$to/$name"
 }
+
+# --- Personal config (always applied) ---
 
 log_section "Config dirs"
 log_step "Copying .config, .local, .claude"
@@ -59,3 +101,35 @@ log_section "ready-tmux scripts"
 log_step "Copying .ready-tmux"
 copy_file home/.ready-tmux $HOME
 
+# --- Work overlay (only when layer=work) ---
+
+if [[ "$CURRENT_LAYER" == "work" ]]; then
+	log_section "Work config overlays"
+	log_step "Copying work .gitconfig"
+	copy_file home-work/.gitconfig $HOME
+	log_step "Copying work .claude/settings.json"
+	copy_file home-work/.claude/settings.json $HOME/.claude
+	log_step "Copying work .local/scripts/tmux-sessionizer"
+	copy_file home-work/.local/scripts/tmux-sessionizer $HOME/.local/scripts
+
+	log_section "TMRW ready-tmux scripts"
+	if [[ -d "$HOME/tmrw" ]]; then
+		log_step "cp tmrw/tmrw.ready-tmux -> ~/tmrw/.ready-tmux"
+		if [[ "$DRY" == "0" ]]; then
+			cp "$script_dir/tmrw/tmrw.ready-tmux" "$HOME/tmrw/.ready-tmux"
+		fi
+	fi
+	for repo in tmrw-client tmrw-protocols tmrw-core-api; do
+		repo_dir="$HOME/tmrw/$repo"
+		if [[ -d "$repo_dir" ]]; then
+			log_step "cp tmrw/$repo.ready-tmux -> ~/tmrw/$repo/.ready-tmux"
+			if [[ "$DRY" == "0" ]]; then
+				cp "$script_dir/tmrw/$repo.ready-tmux" "$repo_dir/.ready-tmux"
+			fi
+			exclude="$repo_dir/.git/info/exclude"
+			if [[ -f "$exclude" ]] && ! grep -q '\.ready-tmux' "$exclude"; then
+				echo ".ready-tmux" >> "$exclude"
+			fi
+		fi
+	done
+fi

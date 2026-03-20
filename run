@@ -3,15 +3,46 @@
 script_dir=$(cd $(dirname "${BASH_SOURCE[0]}") && pwd)
 filter=""
 export DRY="0"
+layer_flag=""
 
+# --- Arg parsing ---
 while [[ $# > 0 ]]; do
-	if [[ "$1" == "--dry" ]]; then
-		DRY="1"
-	else
-		filter="$1"
-	fi
+	case "$1" in
+		--dry) DRY="1" ;;
+		--work) layer_flag="work" ;;
+		--personal) layer_flag="personal" ;;
+		*) filter="$1" ;;
+	esac
 	shift
 done
+
+# --- Layer resolution ---
+LAYER_FILE="$HOME/.dev-env-layer"
+
+if [[ "$DRY" == "0" ]]; then
+	if [[ "$layer_flag" == "work" ]]; then
+		echo "work" > "$LAYER_FILE"
+	elif [[ "$layer_flag" == "personal" ]]; then
+		rm -f "$LAYER_FILE"
+	fi
+fi
+
+# Resolve layer: flag overrides file
+if [[ "$layer_flag" == "work" ]]; then
+	export CURRENT_LAYER="work"
+elif [[ "$layer_flag" == "personal" ]]; then
+	export CURRENT_LAYER="personal"
+elif [[ -f "$LAYER_FILE" ]]; then
+	export CURRENT_LAYER
+	CURRENT_LAYER=$(cat "$LAYER_FILE")
+	# Normalize unknown values to personal
+	if [[ "$CURRENT_LAYER" != "work" && "$CURRENT_LAYER" != "personal" ]]; then
+		echo "WARNING: unknown layer '$CURRENT_LAYER' in $LAYER_FILE, defaulting to personal" >&2
+		export CURRENT_LAYER="personal"
+	fi
+else
+	export CURRENT_LAYER="personal"
+fi
 
 # Manual steps collection
 export MANUAL_STEPS_FILE
@@ -20,12 +51,15 @@ trap 'rm -f "$MANUAL_STEPS_FILE"' EXIT
 
 # --- Dependency resolution ---
 # Store scripts and deps as parallel arrays (bash 3.2 compatible)
-# script_names[i] corresponds to script_dep_list[i]
+# script_names[i] corresponds to script_dep_list[i] and script_dirs[i]
 
 script_names=()
 script_dep_list=()
+script_dirs=()
 
 cd "$script_dir"
+
+# Scan personal scripts from runs/
 for script_path in runs/*; do
 	[[ -f "$script_path" ]] || continue
 	name=$(basename "$script_path")
@@ -33,6 +67,7 @@ for script_path in runs/*; do
 	case "$name" in _*) continue ;; esac
 
 	script_names+=("$name")
+	script_dirs+=("runs")
 
 	# Parse # DEPS: header
 	deps_line=$(grep -m1 '^# DEPS:' "$script_path" 2>/dev/null || true)
@@ -44,6 +79,27 @@ for script_path in runs/*; do
 		script_dep_list+=("")
 	fi
 done
+
+# Scan work scripts from runs-work/ when layer=work
+if [[ "$CURRENT_LAYER" == "work" ]]; then
+	for script_path in runs-work/*; do
+		[[ -f "$script_path" ]] || continue
+		name=$(basename "$script_path")
+		case "$name" in _*) continue ;; esac
+
+		script_names+=("work/$name")
+		script_dirs+=("runs-work")
+
+		deps_line=$(grep -m1 '^# DEPS:' "$script_path" 2>/dev/null || true)
+		if [[ -n "$deps_line" ]]; then
+			deps="${deps_line#\# DEPS:}"
+			deps="$(echo "$deps" | sed 's/,/ /g' | xargs)"
+			script_dep_list+=("$deps")
+		else
+			script_dep_list+=("")
+		fi
+	done
+fi
 
 # Lookup helpers for parallel arrays
 get_index() {
@@ -63,6 +119,14 @@ get_deps() {
 	idx=$(get_index "$1")
 	if [[ "$idx" != "-1" ]]; then
 		echo "${script_dep_list[$idx]}"
+	fi
+}
+
+get_dir() {
+	local idx
+	idx=$(get_index "$1")
+	if [[ "$idx" != "-1" ]]; then
+		echo "${script_dirs[$idx]}"
 	fi
 }
 
@@ -99,6 +163,19 @@ visit() {
 
 # Determine which scripts to run
 if [[ -n "$filter" ]]; then
+	# Resolve filter: try exact match first, then work/ prefix
+	if [[ $(get_index "$filter") == "-1" && "$CURRENT_LAYER" == "work" ]]; then
+		if [[ $(get_index "work/$filter") != "-1" ]]; then
+			filter="work/$filter"
+		fi
+	fi
+
+	# Bail out if filter matches nothing
+	if [[ $(get_index "$filter") == "-1" ]]; then
+		echo "ERROR: unknown script '$filter'" >&2
+		exit 1
+	fi
+
 	# Collect transitive deps for the filtered script
 	_needed=""
 	collect_deps() {
@@ -129,20 +206,24 @@ fi
 source "$script_dir/runs/_lib.sh"
 
 if [[ "$DRY" == "1" ]]; then
-	echo "========== Setting up environment (dry run) =========="
+	echo "========== Setting up environment (dry run, layer=$CURRENT_LAYER) =========="
 	echo ""
 	echo "Execution order: ${sorted_order[*]}"
 else
-	echo "========== Setting up environment =========="
+	echo "========== Setting up environment (layer=$CURRENT_LAYER) =========="
 fi
 
 for name in "${sorted_order[@]}"; do
+	local_dir=$(get_dir "$name")
+	# Strip work/ prefix to get the actual filename
+	local_file="${name#work/}"
+
 	echo ""
 	echo "--- $name ---"
 	if [[ "$DRY" == "1" ]]; then
-		DRY=1 source "./runs/$name"
+		DRY=1 source "./$local_dir/$local_file"
 	else
-		source "./runs/$name"
+		source "./$local_dir/$local_file"
 	fi
 done
 
