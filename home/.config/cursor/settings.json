@@ -1,6 +1,8 @@
 {
   "workbench.colorTheme": "Bearded Theme Monokai Terra",
   "workbench.iconTheme": "bearded-icons",
+  "editor.fontFamily": "FiraCode Nerd Font Mono",
+  "editor.fontLigatures": true,
   "editor.formatOnSave": true,
   "cSpell.diagnosticLevel": "Hint"
 }
