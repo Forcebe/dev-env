@@ -113,23 +113,20 @@ if [[ "$CURRENT_LAYER" == "work" ]]; then
 	copy_file home-work/.local/scripts/tmux-sessionizer $HOME/.local/scripts
 
 	log_section "TMRW ready-tmux scripts"
-	if [[ -d "$HOME/tmrw" ]]; then
-		log_step "cp tmrw/tmrw.ready-tmux -> ~/tmrw/.ready-tmux"
-		if [[ "$DRY" == "0" ]]; then
-			cp "$script_dir/tmrw/tmrw.ready-tmux" "$HOME/tmrw/.ready-tmux"
-		fi
+	execute mkdir -p "$HOME/tmrw"
+	log_step "cp tmrw/tmrw.ready-tmux -> ~/tmrw/.ready-tmux"
+	if [[ "$DRY" == "0" ]]; then
+		cp "$script_dir/tmrw/tmrw.ready-tmux" "$HOME/tmrw/.ready-tmux"
 	fi
 	for repo in tmrw-client tmrw-protocols tmrw-core-api; do
 		repo_dir="$HOME/tmrw/$repo"
-		if [[ -d "$repo_dir" ]]; then
-			log_step "cp tmrw/$repo.ready-tmux -> ~/tmrw/$repo/.ready-tmux"
-			if [[ "$DRY" == "0" ]]; then
-				cp "$script_dir/tmrw/$repo.ready-tmux" "$repo_dir/.ready-tmux"
-			fi
-			exclude="$repo_dir/.git/info/exclude"
-			if [[ -f "$exclude" ]] && ! grep -q '\.ready-tmux' "$exclude"; then
-				echo ".ready-tmux" >> "$exclude"
-			fi
+		log_step "cp tmrw/$repo.ready-tmux -> ~/tmrw/$repo/.ready-tmux"
+		if [[ "$DRY" == "0" ]]; then
+			cp "$script_dir/tmrw/$repo.ready-tmux" "$repo_dir/.ready-tmux"
+		fi
+		exclude="$repo_dir/.git/info/exclude"
+		if [[ -f "$exclude" ]] && ! grep -q '\.ready-tmux' "$exclude"; then
+			echo ".ready-tmux" >> "$exclude"
 		fi
 	done
 fi

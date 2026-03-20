@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Default tmux session layout, called by tmux-sessionizer.
+# Deployed by dev-env. Source: https://github.com/Forcebe/dev-env
 
 session=$1
 dir=$2

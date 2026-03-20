@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DEPS: homebrew, dev-env
+# DEPS: dev-env, homebrew
 source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
 CURSOR_CLI="/Applications/Cursor.app/Contents/Resources/app/bin/cursor"

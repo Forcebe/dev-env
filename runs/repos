@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# DEPS:
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
+
+ensure_cloned() {
+	local repo_url="$1"
+	local target_dir="$2"
+	if [[ -d "$target_dir" ]]; then
+		log_skip "$(basename "$target_dir") already cloned"
+	else
+		log_step "Cloning $(basename "$target_dir")"
+		execute git clone --quiet "$repo_url" "$target_dir"
+	fi
+}
+
+log_section "Personal repos"
+execute mkdir -p "$HOME/personal"
+ensure_cloned git@github.com:Forcebe/zmk-config-hsv.git "$HOME/personal/zmk-config-hsv"
+ensure_cloned git@github.com:Forcebe/qmk_firmware.git "$HOME/personal/qmk_firmware"
+
+if [[ "$CURRENT_LAYER" == "work" ]]; then
+	log_section "Work repos"
+	execute mkdir -p "$HOME/tmrw"
+	ensure_cloned git@github.com:tmrw-health/tmrw-core-api.git "$HOME/tmrw/tmrw-core-api"
+	ensure_cloned git@github.com:tmrw-health/tmrw-protocols.git "$HOME/tmrw/tmrw-protocols"
+	ensure_cloned git@github.com:tmrw-health/tmrw-client.git "$HOME/tmrw/tmrw-client"
+fi

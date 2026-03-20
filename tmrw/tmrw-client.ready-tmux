@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Tmux session layout for tmrw-client, called by tmux-sessionizer.
+# Deployed by dev-env and excluded from git via .git/info/exclude.
+# Source: https://github.com/Forcebe/dev-env
 
 session=$1
 dir=$2
