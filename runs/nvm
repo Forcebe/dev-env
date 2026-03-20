@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# DEPS: dev-env
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
+
+log_section "NVM"
+if [[ -d "$HOME/.nvm" ]]; then
+	log_skip "Already installed"
+else
+	log_step "Installing NVM"
+	if [[ "$DRY" == "0" ]]; then
+		curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+	fi
+fi

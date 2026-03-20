@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# DEPS: dev-env, homebrew
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
+
+log_section "GitHub CLI"
+brew_install gh
+active_hosts=$(gh auth status --active --json hosts --jq '.hosts | add | map(select(.active)) | length' 2>/dev/null || echo 0)
+if [ "$active_hosts" -gt 0 ]; then
+	log_skip "Already logged in"
+else
+	log_step "Logging in to GitHub CLI"
+	if [[ "$DRY" == "0" ]]; then
+		gh auth login
+	fi
+fi

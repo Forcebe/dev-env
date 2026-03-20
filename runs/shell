@@ -2,8 +2,6 @@
 # DEPS: dev-env, homebrew
 source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
-# ====== Utils/CLI tools =======
-
 log_section "FZF"
 clone_or_pull git@github.com:junegunn/fzf.git "$HOME/personal/fzf"
 log_step "Running FZF install script"
@@ -12,35 +10,11 @@ execute "$HOME/personal/fzf/install" --all
 log_section "bat"
 brew_install bat
 
-log_section "NVM"
-if [[ -d "$HOME/.nvm" ]]; then
-	log_skip "Already installed"
-else
-	log_step "Installing NVM"
-	if [[ "$DRY" == "0" ]]; then
-		curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
-	fi
-fi
-
 log_section "parallel"
 brew_install parallel
 
 log_section "shellcheck"
 brew_install shellcheck
-
-# ===== CLI apps =====
-
-log_section "GitHub CLI"
-brew_install gh
-active_hosts=$(gh auth status --active --json hosts --jq '.hosts | add | map(select(.active)) | length' 2>/dev/null || echo 0)
-if [ "$active_hosts" -gt 0 ]; then
-	log_skip "Already logged in"
-else
-	log_step "Logging in to GitHub CLI"
-	if [[ "$DRY" == "0" ]]; then
-		gh auth login
-	fi
-fi
 
 log_section "Starship"
 if command -v starship &>/dev/null; then
