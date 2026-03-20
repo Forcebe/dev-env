@@ -30,12 +30,13 @@ copy_dir() {
 }
 
 copy_file() {
-	local from=$1
-	local to=$2
-	local name=$(basename $from)
+	local from="$1"
+	local to="$2"
+	local name
+	name="$(basename "$from")"
 
-	execute rm -f $to/$name
-	execute cp $from $to/$name
+	execute rm -f "$to/$name"
+	execute cp "$from" "$to/$name"
 }
 
 log_section "Config dirs"
@@ -48,6 +49,11 @@ log_section "Config files"
 log_step "Copying .zshrc, .gitconfig"
 copy_file home/.zshrc $HOME
 copy_file home/.gitconfig $HOME
+
+log_section "Cursor settings"
+log_step "Copying cursor settings"
+execute mkdir -p "$HOME/Library/Application Support/Cursor/User"
+copy_file home/.config/cursor/settings.json "$HOME/Library/Application Support/Cursor/User"
 
 log_section "ready-tmux scripts"
 log_step "Copying .ready-tmux"

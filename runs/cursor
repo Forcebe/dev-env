@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# DEPS: homebrew, dev-env
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
+
+CURSOR_CLI="/Applications/Cursor.app/Contents/Resources/app/bin/cursor"
+
+# ====== Install Cursor ======
+
+log_section "Cursor"
+if [[ -d "/Applications/Cursor.app" ]]; then
+	log_skip "Already installed"
+else
+	log_step "Installing Cursor"
+	brew_cask_install cursor
+fi
+
+# ====== CLI ======
+
+log_section "Cursor CLI"
+if command -v code &>/dev/null; then
+	log_skip "code command already on PATH"
+else
+	log_manual "Open Cursor and run 'Shell Command: Install code command' from the command palette (Cmd+Shift+P)"
+fi
+
+# ====== Extensions ======
+
+log_section "Cursor extensions"
+extensions=(
+	anthropic.claude-code
+	bradlc.vscode-tailwindcss
+	dbaeumer.vscode-eslint
+	esbenp.prettier-vscode
+	eamodio.gitlens
+	GitHub.vscode-github-actions
+	GitHub.vscode-pull-request-github
+	Gruntfuggly.todo-tree
+	streetsidesoftware.code-spell-checker
+	vitest.explorer
+	webpro.vscode-knip
+	yoavbls.pretty-ts-errors
+	vscodevim.vim
+	BeardedBear.beardedtheme
+	BeardedBear.beardedicons
+)
+
+for ext in "${extensions[@]}"; do
+	log_step "Installing $ext"
+	execute "$CURSOR_CLI" --install-extension "$ext"
+done
