@@ -1,3 +1,4 @@
 font-family = "FiraCode Nerd Font Mono"
 theme = "Monokai Pro"
 auto-update = check
+macos-icon = glass

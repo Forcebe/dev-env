@@ -2,5 +2,7 @@
 # DEPS: homebrew
 source "$(dirname "${BASH_SOURCE[0]:-$0}")/../runs/_lib.sh"
 
-log_section "PostgreSQL"
+log_section "Work brew packages"
 brew_install postgresql@17
+brew_install graphicsmagick
+brew_install ghostscript
