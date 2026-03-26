@@ -4,17 +4,23 @@ set -euo pipefail
 VAULT_DIR="$HOME/personal/docs/articles/saved"
 url="${1:?Usage: save-article <url>}"
 
-# Extract title and content as markdown
-title=$(readable "$url" -p title 2>/dev/null || true)
-html=$(readable "$url" 2>/dev/null)
+# Extract article data in one call
+json=$(readable "$url" --json 2>/dev/null)
 
-if [[ -z "$html" ]]; then
+if [[ -z "$json" ]]; then
 	echo "ERROR: Could not extract content from $url" >&2
 	exit 1
 fi
 
+# Parse metadata from JSON
+title=$(echo "$json" | jq -r '.title // ""')
+author=$(echo "$json" | jq -r '.byline // ""')
+length=$(echo "$json" | jq -r '.length // 0')
+reading_time=$(( (length + 999) / 1000 ))
+
 # Convert HTML to clean markdown, strip readability wrapper divs and first H1 (added by template)
-content=$(echo "$html" | pandoc -f html -t gfm --wrap=none | sed '/^<div/d;/^<\/div>/d;/^---*$/d' | sed '0,/^# /{/^# /d;}' | cat -s)
+html=$(echo "$json" | jq -r '."html-content" // ""')
+content=$(echo "$html" | pandoc -f html -t gfm --wrap=none | sed '/^<div/d;/^<\/div>/d;/^---*$/d' | awk '/^# / && !found {found=1; next} 1' | cat -s | sed -e 's/[[:space:]]*$//' -e '1{/^$/d;}' -e '${/^$/d;}')
 
 if [[ -z "$title" ]]; then
 	title=$(echo "$url" | sed 's|https\?://||;s|/.*||')
@@ -29,6 +35,16 @@ filepath="$VAULT_DIR/$filename"
 if [[ ! -d "$VAULT_DIR" ]]; then
 	echo "ERROR: Vault directory $VAULT_DIR does not exist. Clone the docs repo first." >&2
 	exit 1
+fi
+
+# Check for existing article with same slug (different date is ok)
+existing=$(find "$VAULT_DIR" -name "*-${slug}.md" -print -quit 2>/dev/null)
+if [[ -n "$existing" ]]; then
+	echo "Already saved: $(basename "$existing")" >&2
+	echo "$existing"
+	encoded_file=$(printf '%s' "saved/$(basename "$existing")" | jq -sRr @uri)
+	open "obsidian://open?vault=articles&file=$encoded_file"
+	exit 0
 fi
 
 # Generate summary and tags via Claude
@@ -47,8 +63,10 @@ Keep the summary to exactly one sentence. Use lowercase kebab-case tags. Pick 3-
 cat > "$filepath" <<EOF
 ---
 title: "${title//\"/\\\"}"
+${author:+author: "${author//\"/\\\"}"}
 url: ${url}
 saved: ${date_str}
+reading_time: ${reading_time} min
 ${ai_yaml}
 ---
 
@@ -58,3 +76,7 @@ ${content}
 EOF
 
 echo "$filepath"
+
+# Open in Obsidian
+encoded_file=$(printf '%s' "saved/$filename" | jq -sRr @uri)
+open "obsidian://open?vault=articles&file=$encoded_file"
