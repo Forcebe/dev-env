@@ -59,6 +59,7 @@ Scripts run in dependency order. `dev-env` depends on `repos`; all other scripts
 | **nvm** | Node Version Manager |
 | **obsidian** | Obsidian note-taking app + articles vault setup |
 | **orbstack** | OrbStack (containers/VMs) |
+| **pandoc** | Pandoc document converter (used by save-article) |
 | **readability** | readability-cli for article content extraction |
 | **raycast** | Raycast launcher + config import |
 | **shell** | FZF, bat, parallel, shellcheck, Starship prompt |
