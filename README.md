@@ -57,7 +57,9 @@ Scripts run in dependency order. `dev-env` depends on `repos`; all other scripts
 | **macos-defaults** | Keyboard repeat, Dock, Finder, and text input preferences |
 | **neovim** | Neovim v0.11.6 from source + ripgrep, fd, tree-sitter |
 | **nvm** | Node Version Manager |
+| **obsidian** | Obsidian note-taking app + articles vault setup |
 | **orbstack** | OrbStack (containers/VMs) |
+| **readability** | readability-cli for article content extraction |
 | **raycast** | Raycast launcher + config import |
 | **shell** | FZF, bat, parallel, shellcheck, Starship prompt |
 | **slack** | Slack app |
@@ -85,6 +87,8 @@ Config lives in `home/` (personal, always deployed) and `home-work/` (work overl
 **Claude Code** (`home/.claude/`) — Status line with git/model/context info, voice enabled, plugins. Work overlay adds TMRW-specific plugins and marketplace.
 
 **Tmux scripts** (`home/.local/scripts/`) — `tmux-sessionizer` (FZF session picker), `tmux-init` (layout loader), `tmux-cleanup` (kill all sessions). Per-directory `.ready-tmux` scripts define custom layouts. See [Tmux sessionizer](#tmux-sessionizer).
+
+**Article saver** (`home/.local/scripts/save-article`) — Extracts article content via `readability-cli`, generates AI summary and tags via `claude -p`, saves as an Obsidian note to `~/personal/docs/articles/saved/`. Raycast Script Command wrapper at `home/.local/scripts/raycast/save-article.sh`. See [Article saver](#article-saver).
 
 ## Adding a new script
 
@@ -150,6 +154,12 @@ tmux select-window -t "=$session:dev"
 ```
 
 Add `.ready-tmux` to the repo's `.git/info/exclude` to keep it out of git. To make it portable, store the script in this repo (e.g. `tmrw/my-repo.ready-tmux`) and add a copy step to the `dev-env` script — see the TMRW ready-tmux section in `dev-env` for the pattern.
+
+### Article saver
+
+`save-article <url>` saves a web article to Obsidian with an AI-generated summary and tags. It uses `readability-cli` to extract article content and `claude -p` to generate metadata. Notes are saved to `~/personal/docs/articles/saved/` with YAML frontmatter (title, url, saved date, summary, tags). Use Obsidian Bases to filter articles by saved date for engineering showcases.
+
+Also available via Raycast: invoke "Save Article" from the command palette. It accepts a URL argument or reads from the clipboard.
 
 ### Zsh aliases
 

@@ -65,6 +65,10 @@ The `home-work/` directory contains only files that differ from personal — cur
 3. Source `runs/_lib.sh` at the top
 4. Wrap all side-effecting commands in `execute`
 
+### Article saving workflow
+
+`save-article <url>` extracts article content via `readability-cli`, generates summary and tags via `claude -p`, and writes an Obsidian-compatible markdown note to `~/personal/docs/articles/saved/`. A Raycast Script Command wrapper lives in `home/.local/scripts/raycast/save-article.sh`. Raycast script commands directory (`~/.local/scripts/raycast`) must be added manually in Raycast Settings > Extensions > Script Commands.
+
 ### Work scripts (runs-work/)
 
 These only run when `CURRENT_LAYER=work`. They can depend on personal scripts (e.g. `postgresql` depends on `homebrew`). Layer-aware personal scripts (like `repos`) check `CURRENT_LAYER` internally rather than being split into separate work scripts.

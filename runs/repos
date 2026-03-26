@@ -17,6 +17,7 @@ log_section "Personal repos"
 execute mkdir -p "$HOME/personal"
 ensure_cloned git@github.com:Forcebe/zmk-config-hsv.git "$HOME/personal/zmk-config-hsv"
 ensure_cloned git@github.com:Forcebe/qmk_firmware.git "$HOME/personal/qmk_firmware"
+ensure_cloned git@github.com:Forcebe/docs.git "$HOME/personal/docs"
 
 if [[ "$CURRENT_LAYER" == "work" ]]; then
 	log_section "Work repos"

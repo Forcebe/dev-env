@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# DEPS: dev-env, nvm
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
+
+log_section "readability-cli"
+if command -v readable &>/dev/null; then
+	log_skip "Already installed"
+else
+	log_step "Installing readability-cli globally"
+	execute npm install -g readability-cli
+fi

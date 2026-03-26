@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+VAULT_DIR="$HOME/personal/docs/articles/saved"
+url="${1:?Usage: save-article <url>}"
+
+# Extract title and content
+title=$(readable "$url" -p title 2>/dev/null || true)
+content=$(readable "$url" -p text-content 2>/dev/null)
+
+if [[ -z "$content" ]]; then
+	echo "ERROR: Could not extract content from $url" >&2
+	exit 1
+fi
+
+if [[ -z "$title" ]]; then
+	title=$(echo "$url" | sed 's|https\?://||;s|/.*||')
+fi
+
+# Generate filename
+date_str=$(date +%Y-%m-%d)
+slug=$(echo "$title" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]' '-' | sed 's/^-//;s/-$//' | head -c 60)
+filename="${date_str}-${slug}.md"
+filepath="$VAULT_DIR/$filename"
+
+if [[ ! -d "$VAULT_DIR" ]]; then
+	echo "ERROR: Vault directory $VAULT_DIR does not exist. Clone the docs repo first." >&2
+	exit 1
+fi
+
+# Generate summary and tags via Claude
+echo "Summarizing with Claude..." >&2
+ai_yaml=$(echo "$content" | claude -p "You are processing a saved article. Return ONLY these YAML lines (no fences, no --- delimiters, no extra text):
+
+summary: \"One sentence summary here\"
+tags:
+  - tag1
+  - tag2
+  - tag3
+
+Keep the summary to exactly one sentence. Use lowercase kebab-case tags. Pick 3-5 tags.")
+
+# Write the final note: frontmatter + article content
+cat > "$filepath" <<EOF
+---
+title: "${title//\"/\\\"}"
+url: ${url}
+saved: ${date_str}
+${ai_yaml}
+---
+
+# ${title}
+
+${content}
+EOF
+
+echo "$filepath"

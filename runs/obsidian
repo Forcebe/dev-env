@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# DEPS: dev-env, homebrew
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
+
+log_section "Obsidian"
+if [[ -d "/Applications/Obsidian.app" ]]; then
+	log_skip "Already installed"
+else
+	brew_cask_install obsidian
+fi
+
+log_manual "Open Obsidian and add ~/personal/docs/articles as a vault"
+log_manual "Create a Base in the vault root to browse and filter saved articles"
+log_manual "In Raycast Settings > Extensions > Script Commands, add ~/.local/scripts/raycast"
