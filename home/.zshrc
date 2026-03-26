@@ -6,8 +6,6 @@
 export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
-export OPENROUTER_API_KEY="{{ op://Personal/OpenRouter/dmux key }}"
-
 # Install and nvm use specified node version when .nvmrc is found
 autoload -U add-zsh-hook
 

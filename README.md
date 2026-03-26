@@ -74,7 +74,7 @@ Config lives in `home/` (personal, always deployed) and `home-work/` (work overl
 
 **Neovim** (`home/.config/nvim/`) — Full IDE setup with LSP, completion, formatting, linting, and 20+ plugins. See [Neovim deep dive](#neovim).
 
-**Tmux** (`home/.config/tmux/`) — Vi keybinds, mouse support, passthrough enabled, Monokai Pro theme, sessionizer integration. See [Tmux sessionizer](#tmux-sessionizer).
+**Tmux** (`home/.config/tmux/`) — Vi keybinds, mouse support, passthrough enabled, Monokai Pro theme, sessionizer integration (`prefix+f`). See [Tmux sessionizer](#tmux-sessionizer).
 
 **Ghostty** (`home/.config/ghostty/`) — Fira Code Nerd Font, Monokai Pro theme, auto-update enabled.
 
