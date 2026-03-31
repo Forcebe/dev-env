@@ -1,4 +1,7 @@
 
+export NPM_TOKEN="{{ op://.zshrc/NPM_TOKEN/password }}"
+export SENTRY_AUTH_TOKEN="{{ op://.zshrc/nick-sentry-local/credential }}"
+
 # FZF for fuzzy-finding
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
