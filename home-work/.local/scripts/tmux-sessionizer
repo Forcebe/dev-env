@@ -1,7 +1,50 @@
 #!/usr/bin/env bash
 
-sessions=$(tmux list-sessions -F "[TMUX] #{session_name}" 2>/dev/null)
-directories=$({ echo ~/tmrw; find ~/personal ~/tmrw -mindepth 1 -maxdepth 1 -type d; } 2>/dev/null)
+# Display aliases for work repos
+alias_name() {
+	case "$1" in
+		tmrw-core-api) echo "CORE" ;;
+		tmrw-protocols) echo "ORACLE" ;;
+		tmrw-client)    echo "ATLAS" ;;
+		*)              echo "$1" ;;
+	esac
+}
+
+unalias_name() {
+	case "$1" in
+		CORE)   echo "tmrw-core-api" ;;
+		ORACLE) echo "tmrw-protocols" ;;
+		ATLAS)  echo "tmrw-client" ;;
+		*)      echo "$1" ;;
+	esac
+}
+
+# Build active sessions list sorted by most recently used
+sessions=""
+while IFS='|' read -r path name activity; do
+	[[ -z "$name" ]] && continue
+	display=$(alias_name "$name")
+	if [[ "$path" == "$HOME/tmrw"* ]]; then
+		prefix="[WORK]"
+	else
+		prefix="[PERSONAL]"
+	fi
+	sessions+="${activity}|${prefix} ${display}"$'\n'
+done < <(tmux list-sessions -F "#{session_path}|#{session_name}|#{session_activity}" 2>/dev/null)
+sessions=$(echo -n "$sessions" | sort -t'|' -k1 -rn | cut -d'|' -f2)
+
+# Build directory list with aliases
+directories=""
+while IFS= read -r dir; do
+	[[ -z "$dir" ]] && continue
+	base=$(basename "$dir")
+	display=$(alias_name "$base")
+	if [[ "$display" != "$base" ]]; then
+		directories+="$display"$'\n'
+	else
+		directories+="$dir"$'\n'
+	fi
+done < <({ echo ~/tmrw; find ~/personal ~/tmrw -mindepth 1 -maxdepth 1 -type d; } 2>/dev/null)
 
 selected=$(printf '%s\n%s\n' "$sessions" "$directories" | grep -v '^$' | fzf)
 
@@ -17,10 +60,18 @@ switch_to() {
 	fi
 }
 
-if [[ "$selected" == "[TMUX] "* ]]; then
-	selected_name="${selected#\[TMUX\] }"
+if [[ "$selected" == "["*"] "* ]]; then
+	# Active session selected — strip prefix and unalias
+	display_name="${selected#\[*\] }"
+	selected_name=$(unalias_name "$display_name")
 	switch_to
 else
+	# Directory or alias selected — resolve alias to path
+	real_name=$(unalias_name "$selected")
+	if [[ "$real_name" != "$selected" ]]; then
+		# Was an alias — resolve to actual directory
+		selected="$HOME/tmrw/$real_name"
+	fi
 	selected_name=$(basename "$selected" | tr ".,: " "____")
 	if tmux has-session -t="$selected_name" 2> /dev/null; then
 		switch_to

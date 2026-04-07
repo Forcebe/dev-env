@@ -92,11 +92,6 @@ log_step "Copying .zshrc, .gitconfig"
 copy_file home/.zshrc $HOME
 copy_file home/.gitconfig $HOME
 
-log_section "Secrets injection"
-log_step "Injecting 1Password secrets (personal) into .zshrc"
-execute op inject -i "$HOME/.zshrc" -o "$HOME/.zshrc.tmp" --account my.1password.com
-execute mv "$HOME/.zshrc.tmp" "$HOME/.zshrc"
-
 log_section "Cursor settings"
 log_step "Copying cursor settings"
 execute mkdir -p "$HOME/Library/Application Support/Cursor/User"
