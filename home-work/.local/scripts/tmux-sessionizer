@@ -23,7 +23,13 @@ unalias_name() {
 sessions=""
 while IFS='|' read -r path name activity; do
 	[[ -z "$name" ]] && continue
-	display=$(alias_name "$name")
+	if [[ "$name" == *"--"* ]]; then
+		repo_name="${name%%--*}"
+		branch="${name#*--}"
+		display="$(alias_name "$repo_name")/${branch}"
+	else
+		display=$(alias_name "$name")
+	fi
 	if [[ "$path" == "$HOME/tmrw"* ]]; then
 		prefix="[WORK]"
 	else
@@ -38,11 +44,18 @@ directories=""
 while IFS= read -r dir; do
 	[[ -z "$dir" ]] && continue
 	base=$(basename "$dir")
-	display=$(alias_name "$base")
-	if [[ "$display" != "$base" ]]; then
-		directories+="$display"$'\n'
+	if [[ "$base" == *"--"* ]]; then
+		# Worktree directory: tmrw-client--feat-login -> ATLAS/feat-login
+		repo_name="${base%%--*}"
+		branch="${base#*--}"
+		directories+="$(alias_name "$repo_name")/${branch}"$'\n'
 	else
-		directories+="$dir"$'\n'
+		display=$(alias_name "$base")
+		if [[ "$display" != "$base" ]]; then
+			directories+="$display"$'\n'
+		else
+			directories+="$dir"$'\n'
+		fi
 	fi
 done < <({ echo ~/tmrw; find ~/personal ~/tmrw -mindepth 1 -maxdepth 1 -type d; } 2>/dev/null)
 
@@ -61,18 +74,35 @@ switch_to() {
 }
 
 if [[ "$selected" == "["*"] "* ]]; then
-	# Active session selected — strip prefix and unalias
+	# Active session selected — strip prefix
 	display_name="${selected#\[*\] }"
-	selected_name=$(unalias_name "$display_name")
+	if [[ "$display_name" == *"/"* ]]; then
+		# Worktree format: ATLAS/feat-login -> tmrw-client--feat-login
+		alias_part="${display_name%%/*}"
+		branch_part="${display_name#*/}"
+		selected_name="$(unalias_name "$alias_part")--${branch_part}"
+	else
+		selected_name=$(unalias_name "$display_name")
+	fi
 	switch_to
 else
-	# Directory or alias selected — resolve alias to path
-	real_name=$(unalias_name "$selected")
-	if [[ "$real_name" != "$selected" ]]; then
-		# Was an alias — resolve to actual directory
-		selected="$HOME/tmrw/$real_name"
+	# Directory or alias selected
+	if [[ "$selected" == *"/"* && "$selected" != "$HOME"* ]]; then
+		# Worktree alias format: ATLAS/feat-login
+		alias_part="${selected%%/*}"
+		branch_part="${selected#*/}"
+		real_repo=$(unalias_name "$alias_part")
+		selected="$HOME/tmrw/${real_repo}--${branch_part}"
+		selected_name="${real_repo}--${branch_part}"
+	else
+		# Regular alias or full path
+		real_name=$(unalias_name "$selected")
+		if [[ "$real_name" != "$selected" ]]; then
+			selected="$HOME/tmrw/$real_name"
+		fi
+		selected_name=$(basename "$selected" | tr ".,: " "____")
 	fi
-	selected_name=$(basename "$selected" | tr ".,: " "____")
+
 	if tmux has-session -t="$selected_name" 2> /dev/null; then
 		switch_to
 	else

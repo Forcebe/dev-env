@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+	echo "Usage: wt-rm [--force] [branch-name|path]"
+	echo "       wt-rm --all [--force]"
+	echo "       wt-rm --all --global [--force]"
+	echo ""
+	echo "Remove a git worktree and its tmux session."
+	echo ""
+	echo "With no arguments, removes the current directory if it's a worktree."
+	echo ""
+	echo "Options:"
+	echo "  --all       Remove all worktrees for the current repo"
+	echo "  --global    With --all, remove all worktrees across ~/tmrw"
+	echo "  --force     Remove even if worktree has uncommitted changes"
+	exit 1
+}
+
+[[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && usage
+
+# Parse flags
+force=false
+all=false
+global=false
+positional=""
+
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+		--force) force=true ;;
+		--all)   all=true ;;
+		--global) global=true ;;
+		-*)      echo "Unknown option: $1" >&2; usage ;;
+		*)       positional="$1" ;;
+	esac
+	shift
+done
+
+kill_session() {
+	local dir="$1"
+	local session_name
+	session_name=$(basename "$dir" | tr ".,: " "____")
+	tmux kill-session -t "$session_name" 2>/dev/null || true
+}
+
+remove_worktree() {
+	local wt_dir="$1"
+	local wt_force="$2"
+
+	kill_session "$wt_dir"
+
+	if [[ "$wt_force" == "true" ]]; then
+		git worktree remove --force "$wt_dir"
+	else
+		git worktree remove "$wt_dir"
+	fi
+}
+
+# --all mode: remove multiple worktrees
+if [[ "$all" == "true" ]]; then
+	worktrees=()
+
+	if [[ "$global" == "true" ]]; then
+		# Scan ~/tmrw for all worktree directories (contain --)
+		for dir in "$HOME/tmrw"/*--*/; do
+			[[ -d "$dir" ]] || continue
+			# Strip trailing slash
+			dir="${dir%/}"
+			worktrees+=("$dir")
+		done
+	else
+		# Repo-scoped: find worktrees for current repo
+		main_dir=$(git worktree list --porcelain 2>/dev/null | head -1 | sed 's/^worktree //')
+		if [[ -z "$main_dir" ]]; then
+			echo "Error: not inside a git repository" >&2
+			exit 1
+		fi
+		repo_basename=$(basename "$main_dir")
+		parent_dir=$(dirname "$main_dir")
+		for dir in "$parent_dir/${repo_basename}"--*/; do
+			[[ -d "$dir" ]] || continue
+			dir="${dir%/}"
+			worktrees+=("$dir")
+		done
+	fi
+
+	if [[ ${#worktrees[@]} -eq 0 ]]; then
+		echo "No worktrees found"
+		exit 0
+	fi
+
+	# Check for dirty worktrees
+	echo "Will remove ${#worktrees[@]} worktree(s):"
+	dirty_count=0
+	for i in "${!worktrees[@]}"; do
+		wt="${worktrees[$i]}"
+		label="  $((i + 1)). $(basename "$wt")"
+		if [[ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]]; then
+			label+=" (dirty)"
+			((dirty_count++))
+		fi
+		echo "$label"
+	done
+	echo ""
+
+	if [[ $dirty_count -gt 0 && "$force" == "false" ]]; then
+		echo "$dirty_count worktree(s) have uncommitted changes and will be skipped."
+		echo "Use --force to remove them anyway."
+		echo ""
+	fi
+
+	read -rp "Remove all? [y/N] " confirm
+	if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+		echo "Cancelled"
+		exit 0
+	fi
+
+	removed=0
+	skipped=0
+	for wt in "${worktrees[@]}"; do
+		is_dirty=false
+		if [[ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]]; then
+			is_dirty=true
+		fi
+
+		if [[ "$is_dirty" == "true" && "$force" == "false" ]]; then
+			((skipped++))
+			continue
+		fi
+
+		remove_worktree "$wt" "$force"
+		((removed++))
+	done
+
+	total=${#worktrees[@]}
+	msg="Removed $removed/$total worktree(s)"
+	if [[ $skipped -gt 0 ]]; then
+		msg+=" ($skipped skipped — dirty)"
+	fi
+	echo "$msg"
+	exit 0
+fi
+
+# Single worktree removal
+if [[ -n "$positional" ]]; then
+	if [[ -d "$positional" ]]; then
+		# Argument is a path
+		worktree_dir="$positional"
+	else
+		# Argument is a branch name — find the worktree dir
+		main_dir=$(git worktree list --porcelain 2>/dev/null | head -1 | sed 's/^worktree //')
+		if [[ -z "$main_dir" ]]; then
+			echo "Error: not inside a git repository" >&2
+			exit 1
+		fi
+		repo_basename=$(basename "$main_dir")
+		dir_suffix=$(echo "$positional" | tr '/' '-')
+		worktree_dir="$(dirname "$main_dir")/${repo_basename}--${dir_suffix}"
+	fi
+else
+	# No argument — use current directory if it's a worktree
+	git_dir=$(git rev-parse --git-dir 2>/dev/null || true)
+	if [[ -z "$git_dir" ]]; then
+		echo "Error: not inside a git repository" >&2
+		exit 1
+	fi
+	# Worktrees have .git files pointing to main repo, not .git directories
+	if [[ -d "$git_dir" && "$git_dir" == *".git" ]]; then
+		echo "Error: current directory is the main checkout, not a worktree" >&2
+		echo "Provide a branch name or path, or use --all" >&2
+		exit 1
+	fi
+	worktree_dir=$(pwd)
+fi
+
+if [[ ! -d "$worktree_dir" ]]; then
+	echo "Error: worktree not found at $worktree_dir" >&2
+	exit 1
+fi
+
+remove_worktree "$worktree_dir" "$force"
+echo "Worktree removed: $worktree_dir"

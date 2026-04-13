@@ -5,6 +5,18 @@ dir=$2
 
 if [[ -x "$dir/.ready-tmux" ]]; then
 	"$dir/.ready-tmux" "$session" "$dir"
-elif [[ -x "$HOME/.ready-tmux" ]]; then
-	"$HOME/.ready-tmux" "$session" "$dir"
+else
+	# Check if this is a worktree (directory basename contains --)
+	base=$(basename "$dir")
+	if [[ "$base" == *"--"* ]]; then
+		parent_repo="${base%%--*}"
+		parent_dir="$(dirname "$dir")/$parent_repo"
+		if [[ -x "$parent_dir/.ready-tmux" ]]; then
+			"$parent_dir/.ready-tmux" "$session" "$dir"
+		elif [[ -x "$HOME/.ready-tmux" ]]; then
+			"$HOME/.ready-tmux" "$session" "$dir"
+		fi
+	elif [[ -x "$HOME/.ready-tmux" ]]; then
+		"$HOME/.ready-tmux" "$session" "$dir"
+	fi
 fi

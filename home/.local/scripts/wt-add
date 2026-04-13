@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+	echo "Usage: wt-add <branch-name>"
+	echo ""
+	echo "Create a git worktree as a sibling directory with environment"
+	echo "bootstrapping, tmux session, and npm install."
+	echo ""
+	echo "Run from inside any git repository."
+	exit 1
+}
+
+[[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]] && usage
+
+branch="$1"
+
+# Resolve main worktree root (works even if called from inside a worktree)
+main_dir=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
+if [[ -z "$main_dir" ]]; then
+	echo "Error: not inside a git repository" >&2
+	exit 1
+fi
+
+repo_basename=$(basename "$main_dir")
+
+# Sanitize branch name for directory: feat/login -> feat-login
+dir_suffix=$(echo "$branch" | tr '/' '-')
+worktree_dir="$(dirname "$main_dir")/${repo_basename}--${dir_suffix}"
+
+if [[ -d "$worktree_dir" ]]; then
+	echo "Error: worktree already exists at $worktree_dir" >&2
+	exit 1
+fi
+
+# Fetch so remote PR branches are discoverable
+git fetch origin --quiet
+
+# Create the worktree
+if git show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
+	# Local branch exists
+	git worktree add "$worktree_dir" "$branch"
+elif git show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null; then
+	# Remote branch exists — git worktree add auto-tracks it
+	git worktree add "$worktree_dir" "$branch"
+else
+	# New branch from current HEAD
+	git worktree add -b "$branch" "$worktree_dir"
+fi
+
+# Copy .env.local from main checkout
+if [[ -f "$main_dir/.env.local" ]]; then
+	cp "$main_dir/.env.local" "$worktree_dir/.env.local"
+	echo "Copied .env.local from main checkout"
+
+	# Port conflict warning
+	port=$(grep -m1 '^PORT=' "$worktree_dir/.env.local" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]"'"'" || true)
+	if [[ -n "$port" ]]; then
+		parent_dir=$(dirname "$main_dir")
+		for sibling in "$parent_dir/${repo_basename}"--*/; do
+			[[ "$sibling" == "$worktree_dir/" ]] && continue
+			[[ -f "$sibling/.env.local" ]] || continue
+			sibling_port=$(grep -m1 '^PORT=' "$sibling/.env.local" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]"'"'" || true)
+			if [[ "$sibling_port" == "$port" ]]; then
+				echo -e "\033[33mWARNING: PORT=$port is also configured in $(basename "$sibling")/.env.local — you may hit a port conflict\033[0m"
+			fi
+		done
+		# Also check the main checkout
+		main_port=$(grep -m1 '^PORT=' "$main_dir/.env.local" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]"'"'" || true)
+		if [[ "$main_port" == "$port" ]]; then
+			echo -e "\033[33mWARNING: PORT=$port is also configured in the main checkout — you may hit a port conflict\033[0m"
+		fi
+	fi
+fi
+
+# Create tmux session
+session_name=$(basename "$worktree_dir" | tr ".,: " "____")
+
+tmux new-session -ds "$session_name" -c "$worktree_dir"
+tmux-init "$session_name" "$worktree_dir"
+
+# Run npm install in the run window if package.json exists
+if [[ -f "$worktree_dir/package.json" ]]; then
+	# The .ready-tmux layout creates window 1 as the "run" window
+	# Send npm install there
+	run_window=$(tmux list-windows -t "$session_name" -F '#{window_index}' | tail -1)
+	tmux send-keys -t "$session_name:$run_window" "npm install" Enter
+	echo "npm install running in the run window"
+fi
+
+echo "Worktree created at $worktree_dir"
+
+# Switch to the new session
+if [[ -z "${TMUX:-}" ]]; then
+	tmux attach-session -t "$session_name"
+else
+	tmux switch-client -t "$session_name"
+fi

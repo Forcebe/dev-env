@@ -69,6 +69,18 @@ The `home-work/` directory contains only files that differ from personal — cur
 
 `save-article <url>` extracts article content via `readability-cli`, generates summary and tags via `claude -p`, and writes an Obsidian-compatible markdown note to `~/personal/docs/articles/saved/`. A Raycast Script Command wrapper lives in `home/.local/scripts/raycast/save-article.sh`. Raycast script commands directory (`~/.local/scripts/raycast`) must be added manually in Raycast Settings > Extensions > Script Commands.
 
+### Git worktrees
+
+`wt-add` and `wt-rm` (in `home/.local/scripts/`) manage git worktrees as sibling directories with full environment bootstrapping.
+
+**Creating**: `wt-add <branch>` from inside a repo creates `~/tmrw/<repo>--<branch>` with `.env.local` copied from the main checkout, a tmux session with the repo's `.ready-tmux` layout, and `npm install` running in the run window.
+
+**Removing**: `wt-rm [branch|path]` kills the tmux session and removes the worktree. `wt-rm --all` removes all worktrees for the current repo (with confirmation). `wt-rm --all --global` removes all worktrees across `~/tmrw`.
+
+**Naming convention**: Worktrees use `--` as separator (`tmrw-client--feat-login`). The sessionizer and `tmux-init` detect this pattern to resolve aliases (`ATLAS/feat-login`) and `.ready-tmux` scripts from the parent repo.
+
+**tmux-init resolution chain**: `$dir/.ready-tmux` → parent repo's `.ready-tmux` (stripped `--*` from basename) → `$HOME/.ready-tmux`.
+
 ### Work scripts (runs-work/)
 
 These only run when `CURRENT_LAYER=work`. They can depend on personal scripts (e.g. `postgresql` depends on `homebrew`). Layer-aware personal scripts (like `repos`) check `CURRENT_LAYER` internally rather than being split into separate work scripts.
