@@ -39,7 +39,7 @@ while IFS='|' read -r path name activity; do
 	else
 		prefix="[PERSONAL]"
 	fi
-	indicator=" "
+	indicator=""
 	if echo "$running_session_list" | grep -qxF "$name"; then
 		indicator="● "
 	fi
