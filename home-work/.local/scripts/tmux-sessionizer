@@ -19,6 +19,18 @@ unalias_name() {
 	esac
 }
 
+# Detect sessions with running dev servers (single tmux call)
+declare -A running_sessions
+while IFS='|' read -r sname cmd; do
+	case "$cmd" in
+		node|next|npm|npx|tsx|ts-node) running_sessions["$sname"]=1 ;;
+	esac
+done < <(tmux list-panes -a -F '#{session_name}|#{pane_current_command}' 2>/dev/null)
+
+# Spinner frame rotates each time sessionizer opens
+spinner=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+spin="${spinner[$(( $(date +%s) % 10 ))]}"
+
 # Build active sessions list sorted by most recently used
 sessions=""
 while IFS='|' read -r path name activity; do
@@ -35,7 +47,11 @@ while IFS='|' read -r path name activity; do
 	else
 		prefix="[PERSONAL]"
 	fi
-	sessions+="${activity}|${prefix} ${display}"$'\n'
+	indicator=""
+	if [[ -n "${running_sessions[$name]:-}" ]]; then
+		indicator=" $spin"
+	fi
+	sessions+="${activity}|${prefix} ${display}${indicator}"$'\n'
 done < <(tmux list-sessions -F "#{session_path}|#{session_name}|#{session_activity}" 2>/dev/null)
 sessions=$(echo -n "$sessions" | sort -t'|' -k1 -rn | cut -d'|' -f2)
 
@@ -74,8 +90,9 @@ switch_to() {
 }
 
 if [[ "$selected" == "["*"] "* ]]; then
-	# Active session selected — strip prefix
+	# Active session selected — strip prefix and running indicator
 	display_name="${selected#\[*\] }"
+	display_name=$(echo "$display_name" | sed 's/ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]$//')
 	if [[ "$display_name" == *"/"* ]]; then
 		# Worktree format: ATLAS/feat-login -> tmrw-client--feat-login
 		alias_part="${display_name%%/*}"

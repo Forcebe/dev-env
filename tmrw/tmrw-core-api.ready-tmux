@@ -15,4 +15,5 @@ tmux send-keys -t "$bottom_right" "claude" Enter
 tmux select-pane -t "$pane"
 
 tmux new-window -t "=$session" -n "core-run" -c "$dir"
+tmux split-window -v -t "=$session:core-run" -c "$dir"
 tmux select-window -t "=$session:core-dev"
