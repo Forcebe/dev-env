@@ -19,17 +19,9 @@ unalias_name() {
 	esac
 }
 
-# Detect sessions with running dev servers (single tmux call)
-declare -A running_sessions
-while IFS='|' read -r sname cmd; do
-	case "$cmd" in
-		node|next|npm|npx|tsx|ts-node) running_sessions["$sname"]=1 ;;
-	esac
-done < <(tmux list-panes -a -F '#{session_name}|#{pane_current_command}' 2>/dev/null)
-
-# Spinner frame rotates each time sessionizer opens
-spinner=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-spin="${spinner[$(( $(date +%s) % 10 ))]}"
+# Detect sessions with running dev servers (single tmux call, no associative arrays for bash 3 compat)
+running_session_list=$(tmux list-panes -a -F '#{session_name}|#{pane_current_command}' 2>/dev/null \
+	| grep -E '\|(node|next|npm|npx|tsx|ts-node)$' | cut -d'|' -f1 | sort -u)
 
 # Build active sessions list sorted by most recently used
 sessions=""
@@ -47,19 +39,24 @@ while IFS='|' read -r path name activity; do
 	else
 		prefix="[PERSONAL]"
 	fi
-	indicator=""
-	if [[ -n "${running_sessions[$name]:-}" ]]; then
-		indicator=" $spin"
+	indicator=" "
+	if echo "$running_session_list" | grep -qxF "$name"; then
+		indicator="● "
 	fi
-	sessions+="${activity}|${prefix} ${display}${indicator}"$'\n'
+	sessions+="${activity}|${indicator}${prefix} ${display}"$'\n'
 done < <(tmux list-sessions -F "#{session_path}|#{session_name}|#{session_activity}" 2>/dev/null)
 sessions=$(echo -n "$sessions" | sort -t'|' -k1 -rn | cut -d'|' -f2)
 
-# Build directory list with aliases
+# Collect active session names to avoid duplicates in directory list
+active_session_list=$(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+
+# Build directory list with aliases (skip dirs with active sessions)
 directories=""
 while IFS= read -r dir; do
 	[[ -z "$dir" ]] && continue
 	base=$(basename "$dir")
+	session_check=$(echo "$base" | tr ".,: " "____")
+	echo "$active_session_list" | grep -qxF "$session_check" && continue
 	if [[ "$base" == *"--"* ]]; then
 		# Worktree directory: tmrw-client--feat-login -> ATLAS/feat-login
 		repo_name="${base%%--*}"
@@ -89,10 +86,11 @@ switch_to() {
 	fi
 }
 
-if [[ "$selected" == "["*"] "* ]]; then
-	# Active session selected — strip prefix and running indicator
+if [[ "$selected" == *"["*"] "* ]]; then
+	# Active session selected — strip running indicator and prefix
+	selected="${selected#● }"
+	selected="${selected# }"
 	display_name="${selected#\[*\] }"
-	display_name=$(echo "$display_name" | sed 's/ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]$//')
 	if [[ "$display_name" == *"/"* ]]; then
 		# Worktree format: ATLAS/feat-login -> tmrw-client--feat-login
 		alias_part="${display_name%%/*}"
