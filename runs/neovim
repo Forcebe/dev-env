@@ -5,7 +5,7 @@ source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 NEOVIM_VERSION="0.11.6"
 
 log_section "Neovim source"
-clone_or_pull git@github.com:neovim/neovim.git ~/personal/neovim "v$NEOVIM_VERSION"
+clone_or_pull https://github.com/neovim/neovim.git ~/personal/neovim "v$NEOVIM_VERSION"
 
 log_section "Build dependencies"
 brew_install ninja cmake gettext curl git

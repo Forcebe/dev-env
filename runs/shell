@@ -3,7 +3,7 @@
 source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
 log_section "FZF"
-clone_or_pull git@github.com:junegunn/fzf.git "$HOME/personal/fzf"
+clone_or_pull https://github.com/junegunn/fzf.git "$HOME/personal/fzf"
 log_step "Running FZF install script"
 execute "$HOME/personal/fzf/install" --all
 
