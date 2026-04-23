@@ -52,21 +52,6 @@ fi
 
 source "$script_dir/runs/_lib.sh"
 
-WORK_OP_ACCOUNT="tmrw-health.1password.com"
-
-# Resolve the 1Password account for the current layer.
-# Work: hardcoded to the TMRW account.
-# Personal: the first signed-in account in `op account list` that isn't work.
-# `op account list` column order assumption: URL is column 1 (stable across 2.x).
-resolve_op_account() {
-	if [[ "$CURRENT_LAYER" == "work" ]]; then
-		echo "$WORK_OP_ACCOUNT"
-	else
-		op account list 2>/dev/null \
-			| awk -v work="$WORK_OP_ACCOUNT" 'NR>1 && $1 != work { print $1; exit }'
-	fi
-}
-
 copy_dir() {
 	local from=$1
 	local to=$2
@@ -118,36 +103,22 @@ copy_file home/.ready-tmux $HOME
 
 # --- Secrets injection (both layers; templates live in home/.zshrc) ---
 
-# `op account list` returns 0 with empty output when no account is added,
-# so a non-empty line count is the real signal of an authenticated CLI.
-op_authenticated() {
-	command -v op &>/dev/null || return 1
-	local lines
-	lines=$(op account list 2>/dev/null | wc -l)
-	[[ "$lines" -ge 2 ]]
-}
-
 log_section "1Password secrets injection"
 if ! command -v op &>/dev/null; then
 	log_skip "op CLI not installed, skipping secrets injection"
 	log_manual "Install 1Password CLI + sign in, then re-run './dev-env' to populate secrets in ~/.zshrc"
-elif ! op_authenticated; then
-	log_skip "op CLI not authenticated, skipping secrets injection"
-	log_manual "Sign in to 1Password CLI, then re-run './dev-env' to populate secrets in ~/.zshrc"
+elif ! op_account_ready; then
+	log_skip "No signed-in 1Password account for layer=$CURRENT_LAYER, skipping secrets injection"
+	log_manual "Sign in to the ${CURRENT_LAYER} 1Password account, then re-run './dev-env'"
 else
 	op_account=$(resolve_op_account)
-	if [[ -z "$op_account" ]]; then
-		log_skip "Could not resolve 1Password account for layer=$CURRENT_LAYER, skipping"
-		log_manual "Sign in to the ${CURRENT_LAYER} 1Password account, then re-run './dev-env'"
+	log_step "Injecting secrets into .zshrc (account=$op_account)"
+	if execute op inject -i "$HOME/.zshrc" -o "$HOME/.zshrc.tmp" --account "$op_account"; then
+		execute mv "$HOME/.zshrc.tmp" "$HOME/.zshrc"
 	else
-		log_step "Injecting secrets into .zshrc (account=$op_account)"
-		if execute op inject -i "$HOME/.zshrc" -o "$HOME/.zshrc.tmp" --account "$op_account"; then
-			execute mv "$HOME/.zshrc.tmp" "$HOME/.zshrc"
-		else
-			log_skip "op inject failed, leaving .zshrc untouched"
-			execute rm -f "$HOME/.zshrc.tmp"
-			log_manual "Re-run './dev-env' after resolving 1Password issue"
-		fi
+		log_skip "op inject failed, leaving .zshrc untouched"
+		execute rm -f "$HOME/.zshrc.tmp"
+		log_manual "Re-run './dev-env' after resolving 1Password issue"
 	fi
 fi
 
