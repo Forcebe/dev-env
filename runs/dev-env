@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DEPS: repos
+# DEPS: repos, 1password
 # All other scripts should depend on dev-env to ensure config is deployed first
 source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
