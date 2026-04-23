@@ -39,7 +39,9 @@ When `layer=work`:
 
 Scripts declare deps via `# DEPS:` header. `run` does topological sort with cycle detection. The chain is:
 
-`repos` (no deps) → `dev-env` (deps: repos) → everything else (deps: dev-env, and homebrew if they need brew)
+`homebrew` (no deps) → `1password` (deps: homebrew) → `repos` (deps: 1password) → `dev-env` (deps: repos, 1password) → everything else (deps: dev-env, and homebrew if they need brew)
+
+`1password` is a user-gated ordering barrier: it installs the app + CLI, then prompts the user to enable CLI integration and the SSH agent. Everything downstream can rely on `op` being available and authenticated, plus SSH-via-1Password for git clones. Users can skip the gate (`s`) or abort (`q`).
 
 All scripts should depend on `dev-env`. Scripts that don't need brew (e.g. `claude`, `nvm`, `macos-defaults`) omit the `homebrew` dep.
 
@@ -57,6 +59,8 @@ All scripts should depend on `dev-env`. Scripts that don't need brew (e.g. `clau
 `dev-env` has its own layer resolution (reads `CURRENT_LAYER` env var from `run`, or resolves independently when called standalone). It uses `copy_dir` for personal config (replaces subdirs) and `copy_file` for work overlays (merges on top).
 
 The `home-work/` directory contains only files that differ from personal — currently `.gitconfig`, `.claude/settings.json`, and `.local/scripts/tmux-sessionizer`.
+
+`dev-env` runs `op inject` on `~/.zshrc` for both layers (personal `home/.zshrc` contains `op://` templates for NPM_TOKEN, SENTRY_AUTH_TOKEN). The work account is hardcoded as `tmrw-health.1password.com`; the personal account is auto-detected as the first signed-in account in `op account list` that isn't work. Injection is skipped with a warning if `op` is missing or not authenticated — `.zshrc` is never corrupted partway.
 
 ### Adding a new run script
 
