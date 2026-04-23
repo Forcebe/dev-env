@@ -40,11 +40,30 @@ reading_time=$(( (length + 999) / 1000 ))
 
 # Convert HTML to clean markdown, strip readability wrapper divs and first H1 (added by template)
 html=$(echo "$json" | jq -r '."html-content" // ""')
+
+# Strip layout/responsive attributes from <img> tags so pandoc emits plain
+# markdown images. Without this, pandoc keeps raw <img> HTML with explicit
+# width/height, and Obsidian renders them with wrong aspect ratios.
+html=$(printf '%s' "$html" | python3 - <<'PY'
+import re, sys
+html = sys.stdin.read()
+ATTRS = re.compile(
+    r'\s+(?:width|height|srcset|sizes|loading|decoding|fetchpriority|style|class|id|data-[^=\s]*)'
+    r'\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)',
+    re.IGNORECASE,
+)
+sys.stdout.write(re.sub(r'<img\b[^>]*>', lambda m: ATTRS.sub('', m.group(0)), html, flags=re.IGNORECASE))
+PY
+)
+
 content=$(echo "$html" | pandoc -f html -t gfm --wrap=none | sed '/^<div/d;/^<\/div>/d;/^---*$/d' | awk '/^# / && !found {found=1; next} 1' | cat -s | sed -e 's/[[:space:]]*$//' -e '1{/^$/d;}' -e '${/^$/d;}')
 
 if [[ -z "$title" ]]; then
 	title=$(echo "$url" | sed 's|https\?://||;s|/.*||')
 fi
+
+# Strip surrounding straight/curly quotes (some sites wrap HTML <title> in them)
+title=$(printf '%s' "$title" | sed -E $'s/^[\"\xe2\x80\x9c\xe2\x80\x98\']+//; s/[\"\xe2\x80\x9d\xe2\x80\x99\']+$//')
 
 # Generate filename from the title, preserving case and spaces.
 # Strip filesystem-unsafe chars (/ \ : * ? " < > |), collapse whitespace,
@@ -54,7 +73,7 @@ sanitized_title=$(printf '%s' "$title" \
 	| tr -d '\n\r\t' \
 	| tr '/\\:*?"<>|' '-' \
 	| tr -s ' ' \
-	| sed -E 's/^[ .]+//; s/ +$//')
+	| sed -E 's/^[ .-]+//; s/[ .-]+$//')
 if [[ ${#sanitized_title} -gt 200 ]]; then
 	sanitized_title="${sanitized_title:0:200}"
 fi
@@ -87,21 +106,25 @@ tags:
 
 Keep the summary to exactly one sentence. Use lowercase kebab-case tags. Pick 3-5 tags.")
 
-# Write the final note: frontmatter + article content
-cat > "$filepath" <<EOF
----
-title: "${title//\"/\\\"}"
-${author:+author: "${author//\"/\\\"}"}
-url: ${url}
-saved: ${date_str}
-reading_time: ${reading_time} min
-${ai_yaml}
----
+# Write the final note: frontmatter + article content.
+# Use single-quoted YAML strings so embedded " and \ are literal; only ' needs
+# escaping (doubled as '').
+yaml_escape() { printf '%s' "$1" | sed "s/'/''/g"; }
+safe_title=$(yaml_escape "$title")
+safe_author=$(yaml_escape "$author")
 
-# ${title}
-
-${content}
-EOF
+{
+	printf -- '---\n'
+	printf "title: '%s'\n" "$safe_title"
+	[[ -n "$author" ]] && printf "author: '%s'\n" "$safe_author"
+	printf 'url: %s\n' "$url"
+	printf 'saved: %s\n' "$date_str"
+	printf 'reading_time: %s min\n' "$reading_time"
+	printf '%s\n' "$ai_yaml"
+	printf -- '---\n\n'
+	printf '# %s\n\n' "$title"
+	printf '%s\n' "$content"
+} > "$filepath"
 
 echo "$filepath"
 
