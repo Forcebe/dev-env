@@ -113,12 +113,32 @@ elif ! op_account_ready; then
 else
 	op_account=$(resolve_op_account)
 	log_step "Injecting secrets into .zshrc (account=$op_account)"
-	if execute op inject -i "$HOME/.zshrc" -o "$HOME/.zshrc.tmp" --account "$op_account"; then
-		execute mv "$HOME/.zshrc.tmp" "$HOME/.zshrc"
-	else
-		log_skip "op inject failed, leaving .zshrc untouched"
+	log_step "1Password may pop up a biometric/password prompt — approve it when it appears"
+
+	inject_succeeded=0
+	while true; do
+		if execute op inject -i "$HOME/.zshrc" -o "$HOME/.zshrc.tmp" --account "$op_account"; then
+			execute mv "$HOME/.zshrc.tmp" "$HOME/.zshrc"
+			inject_succeeded=1
+			break
+		fi
 		execute rm -f "$HOME/.zshrc.tmp"
-		log_manual "Re-run './dev-env' after resolving 1Password issue"
+		if [[ ! -t 0 ]]; then
+			break
+		fi
+		echo ""
+		echo "  op inject failed — the 1Password prompt likely timed out or was not approved."
+		echo "    [Enter]  retry (approve the 1Password prompt first)"
+		echo "    s        skip secrets injection"
+		read -r -p "  op inject> " answer
+		case "$answer" in
+			s|S) break ;;
+			*) ;;
+		esac
+	done
+	if [[ "$inject_succeeded" == "0" ]]; then
+		log_skip "Secrets injection not completed, .zshrc left untouched"
+		log_manual "Re-run './dev-env' after approving the 1Password prompt"
 	fi
 fi
 
