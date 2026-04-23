@@ -3,4 +3,8 @@
 source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
 log_section "Slack"
-brew_cask_install slack
+if [[ -d "/Applications/Slack.app" ]]; then
+	log_skip "Already installed"
+else
+	brew_cask_install slack
+fi
