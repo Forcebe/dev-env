@@ -71,7 +71,11 @@ The `home-work/` directory contains only files that differ from personal — cur
 
 ### Article saving workflow
 
-`save-article <url>` extracts article content via `readability-cli`, generates summary and tags via `claude -p`, and writes an Obsidian-compatible markdown note to `~/personal/docs/articles/saved/`. A Raycast Script Command wrapper lives in `home/.local/scripts/raycast/save-article.sh`. Raycast script commands directory (`~/.local/scripts/raycast`) must be added manually in Raycast Settings > Extensions > Script Commands.
+`save-article <url>` extracts article content via `readability-cli`, generates summary and tags via `claude -p`, and writes an Obsidian-compatible markdown note to `~/personal/docs/articles/saved/`. A Raycast Script Command wrapper lives in `home/.local/scripts/raycast/save-article.sh`. Raycast script commands directory (`~/.local/scripts/raycast`) must be added manually via Settings (Cmd+,) > Extensions > "+" in the top tab bar > "Add Script Directory".
+
+### Raycast config
+
+`raycast/raycast.rayconfig` is an exported Raycast settings bundle (hotkeys, enabled extensions, command preferences). Import via Settings > Advanced > Import on a new machine. To back up changes, export from the same pane and overwrite `raycast/raycast.rayconfig`.
 
 ### Git worktrees
 
