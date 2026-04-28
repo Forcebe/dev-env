@@ -102,3 +102,36 @@ ensure_cask_app() {
 
 	brew_cask_install "$cask"
 }
+
+# --- 1Password account helpers ---
+# Shared so that runs/1password (the auth gate) and dev-env (op inject) agree
+# on which account is expected for each layer.
+
+WORK_OP_ACCOUNT="tmrw-health.1password.com"
+
+# Resolve the 1Password account URL for the current layer.
+# Work: hardcoded to the TMRW account.
+# Personal: the first signed-in account in `op account list` that isn't work.
+# `op account list` column order assumption: URL is column 1 (stable across 2.x).
+# Echoes empty string when no match is found.
+resolve_op_account() {
+	if ! command -v op &>/dev/null; then
+		return 0
+	fi
+	if [[ "$CURRENT_LAYER" == "work" ]]; then
+		# Only echo if the work account is actually signed in
+		op account list 2>/dev/null \
+			| awk -v work="$WORK_OP_ACCOUNT" 'NR>1 && $1 == work { print $1; exit }'
+	else
+		op account list 2>/dev/null \
+			| awk -v work="$WORK_OP_ACCOUNT" 'NR>1 && $1 != work { print $1; exit }'
+	fi
+}
+
+# True when op is installed AND the layer-specific account is signed in.
+op_account_ready() {
+	command -v op &>/dev/null || return 1
+	local account
+	account=$(resolve_op_account)
+	[[ -n "$account" ]]
+}

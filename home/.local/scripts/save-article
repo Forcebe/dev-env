@@ -2,7 +2,27 @@
 set -euo pipefail
 
 VAULT_DIR="$HOME/personal/docs/articles/saved"
-url="${1:?Usage: save-article <url>}"
+raw_url="${1:?Usage: save-article <url>}"
+
+# Strip tracking query params (utm_*, fbclid, gclid, etc.) before fetching
+url=$(python3 - "$raw_url" <<'PY'
+import sys
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+
+TRACKING = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "yclid",
+    "twclid", "li_fat_id", "igshid",
+    "mc_cid", "mc_eid", "_hsenc", "_hsmi", "ck_subscriber_id",
+    "ref", "ref_source", "ref_medium", "__s", "_ga", "spm", "src",
+    "share", "share_source",
+}
+
+parsed = urlparse(sys.argv[1].strip())
+kept = [(k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True) if k.lower() not in TRACKING]
+print(urlunparse(parsed._replace(query=urlencode(kept, doseq=True))))
+PY
+)
 
 # Extract article data in one call
 json=$(readable "$url" --json 2>/dev/null)
@@ -20,16 +40,44 @@ reading_time=$(( (length + 999) / 1000 ))
 
 # Convert HTML to clean markdown, strip readability wrapper divs and first H1 (added by template)
 html=$(echo "$json" | jq -r '."html-content" // ""')
+
+# Strip layout/responsive attributes from <img> tags so pandoc emits plain
+# markdown images. Without this, pandoc keeps raw <img> HTML with explicit
+# width/height, and Obsidian renders them with wrong aspect ratios.
+html=$(printf '%s' "$html" | python3 - <<'PY'
+import re, sys
+html = sys.stdin.read()
+ATTRS = re.compile(
+    r'\s+(?:width|height|srcset|sizes|loading|decoding|fetchpriority|style|class|id|data-[^=\s]*)'
+    r'\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)',
+    re.IGNORECASE,
+)
+sys.stdout.write(re.sub(r'<img\b[^>]*>', lambda m: ATTRS.sub('', m.group(0)), html, flags=re.IGNORECASE))
+PY
+)
+
 content=$(echo "$html" | pandoc -f html -t gfm --wrap=none | sed '/^<div/d;/^<\/div>/d;/^---*$/d' | awk '/^# / && !found {found=1; next} 1' | cat -s | sed -e 's/[[:space:]]*$//' -e '1{/^$/d;}' -e '${/^$/d;}')
 
 if [[ -z "$title" ]]; then
 	title=$(echo "$url" | sed 's|https\?://||;s|/.*||')
 fi
 
-# Generate filename
+# Strip surrounding straight/curly quotes (some sites wrap HTML <title> in them)
+title=$(printf '%s' "$title" | sed -E $'s/^[\"\xe2\x80\x9c\xe2\x80\x98\']+//; s/[\"\xe2\x80\x9d\xe2\x80\x99\']+$//')
+
+# Generate filename from the title, preserving case and spaces.
+# Strip filesystem-unsafe chars (/ \ : * ? " < > |), collapse whitespace,
+# trim leading dots/spaces, and cap length for filesystem safety.
 date_str=$(date +%Y-%m-%d)
-slug=$(echo "$title" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]' '-' | sed 's/^-//;s/-$//' | head -c 60)
-filename="${date_str}-${slug}.md"
+sanitized_title=$(printf '%s' "$title" \
+	| tr -d '\n\r\t' \
+	| tr '/\\:*?"<>|' '-' \
+	| tr -s ' ' \
+	| sed -E 's/^[ .-]+//; s/[ .-]+$//')
+if [[ ${#sanitized_title} -gt 200 ]]; then
+	sanitized_title="${sanitized_title:0:200}"
+fi
+filename="${sanitized_title}.md"
 filepath="$VAULT_DIR/$filename"
 
 if [[ ! -d "$VAULT_DIR" ]]; then
@@ -37,12 +85,11 @@ if [[ ! -d "$VAULT_DIR" ]]; then
 	exit 1
 fi
 
-# Check for existing article with same slug (different date is ok)
-existing=$(find "$VAULT_DIR" -name "*-${slug}.md" -print -quit 2>/dev/null)
-if [[ -n "$existing" ]]; then
-	echo "Already saved: $(basename "$existing")" >&2
-	echo "$existing"
-	encoded_file=$(printf '%s' "saved/$(basename "$existing")" | jq -sRr @uri)
+# Same title → same filename → treat as already saved
+if [[ -f "$filepath" ]]; then
+	echo "Already saved: $filename" >&2
+	echo "$filepath"
+	encoded_file=$(printf '%s' "saved/$filename" | jq -sRr @uri)
 	open "obsidian://open?vault=articles&file=$encoded_file"
 	exit 0
 fi
@@ -59,21 +106,25 @@ tags:
 
 Keep the summary to exactly one sentence. Use lowercase kebab-case tags. Pick 3-5 tags.")
 
-# Write the final note: frontmatter + article content
-cat > "$filepath" <<EOF
----
-title: "${title//\"/\\\"}"
-${author:+author: "${author//\"/\\\"}"}
-url: ${url}
-saved: ${date_str}
-reading_time: ${reading_time} min
-${ai_yaml}
----
+# Write the final note: frontmatter + article content.
+# Use single-quoted YAML strings so embedded " and \ are literal; only ' needs
+# escaping (doubled as '').
+yaml_escape() { printf '%s' "$1" | sed "s/'/''/g"; }
+safe_title=$(yaml_escape "$title")
+safe_author=$(yaml_escape "$author")
 
-# ${title}
-
-${content}
-EOF
+{
+	printf -- '---\n'
+	printf "title: '%s'\n" "$safe_title"
+	[[ -n "$author" ]] && printf "author: '%s'\n" "$safe_author"
+	printf 'url: %s\n' "$url"
+	printf 'saved: %s\n' "$date_str"
+	printf 'reading_time: %s min\n' "$reading_time"
+	printf '%s\n' "$ai_yaml"
+	printf -- '---\n\n'
+	printf '# %s\n\n' "$title"
+	printf '%s\n' "$content"
+} > "$filepath"
 
 echo "$filepath"
 

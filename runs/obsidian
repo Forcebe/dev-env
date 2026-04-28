@@ -7,4 +7,3 @@ ensure_cask_app obsidian "/Applications/Obsidian.app"
 
 log_manual "Open Obsidian and add ~/personal/docs/articles as a vault"
 log_manual "Create a Base in the vault root to browse and filter saved articles"
-log_manual "In Raycast Settings > Extensions > Script Commands, add ~/.local/scripts/raycast"

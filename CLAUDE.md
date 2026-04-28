@@ -39,7 +39,9 @@ When `layer=work`:
 
 Scripts declare deps via `# DEPS:` header. `run` does topological sort with cycle detection. The chain is:
 
-`repos` (no deps) → `dev-env` (deps: repos) → everything else (deps: dev-env, and homebrew if they need brew)
+`homebrew` (no deps) → `1password` (deps: homebrew) → `repos` (deps: 1password) → `dev-env` (deps: repos, 1password) → everything else (deps: dev-env, and homebrew if they need brew)
+
+`1password` is a user-gated ordering barrier: it installs the app + CLI, then prompts the user to enable CLI integration and the SSH agent. Everything downstream can rely on `op` being available and authenticated, plus SSH-via-1Password for git clones. Users can skip the gate (`s`) or abort (`q`).
 
 All scripts should depend on `dev-env`. Scripts that don't need brew (e.g. `claude`, `nvm`, `macos-defaults`) omit the `homebrew` dep.
 
@@ -58,6 +60,8 @@ All scripts should depend on `dev-env`. Scripts that don't need brew (e.g. `clau
 
 The `home-work/` directory contains only files that differ from personal — currently `.gitconfig`, `.claude/settings.json`, and `.local/scripts/tmux-sessionizer`.
 
+`dev-env` runs `op inject` on `~/.zshrc` for both layers (personal `home/.zshrc` contains `op://` templates for NPM_TOKEN, SENTRY_AUTH_TOKEN). The work account is hardcoded as `tmrw-health.1password.com`; the personal account is auto-detected as the first signed-in account in `op account list` that isn't work. Injection is skipped with a warning if `op` is missing or not authenticated — `.zshrc` is never corrupted partway.
+
 ### Adding a new run script
 
 1. Create `runs/<name>` (executable, no extension)
@@ -67,7 +71,11 @@ The `home-work/` directory contains only files that differ from personal — cur
 
 ### Article saving workflow
 
-`save-article <url>` extracts article content via `readability-cli`, generates summary and tags via `claude -p`, and writes an Obsidian-compatible markdown note to `~/personal/docs/articles/saved/`. A Raycast Script Command wrapper lives in `home/.local/scripts/raycast/save-article.sh`. Raycast script commands directory (`~/.local/scripts/raycast`) must be added manually in Raycast Settings > Extensions > Script Commands.
+`save-article <url>` extracts article content via `readability-cli`, generates summary and tags via `claude -p`, and writes an Obsidian-compatible markdown note to `~/personal/docs/articles/saved/`. A Raycast Script Command wrapper lives in `home/.local/scripts/raycast/save-article.sh`. Raycast script commands directory (`~/.local/scripts/raycast`) must be added manually via Settings (Cmd+,) > Extensions > "+" in the top tab bar > "Add Script Directory".
+
+### Raycast config
+
+`raycast/raycast.rayconfig` is an exported Raycast settings bundle (hotkeys, enabled extensions, command preferences). Import via Settings > Advanced > Import on a new machine. To back up changes, export from the same pane and overwrite `raycast/raycast.rayconfig`.
 
 ### Git worktrees
 

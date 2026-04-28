@@ -13,7 +13,11 @@ else
 		execute rm -rf "/Applications/Raycast.app"
 	fi
 	brew_cask_install raycast
-	log_manual "Open Raycast and import config: run 'Import Settings & Data' and select $_script_dir/raycast/raycast.rayconfig"
 	log_manual "In macOS System Settings > Keyboard > Keyboard Shortcuts > Spotlight, disable 'Show Spotlight search' (Cmd+Space)"
 	log_manual "In Raycast Settings > General, set hotkey to Cmd+Space"
+	log_manual "Import existing Raycast config: Settings (Cmd+,) > Advanced > Import, select $_script_dir/raycast/raycast.rayconfig"
+	log_manual "Register script commands: Settings (Cmd+,) > Extensions > click '+' in the top tab bar > 'Add Script Directory' > select ~/.local/scripts/raycast"
 fi
+
+# To back up the current Raycast setup, export via Settings > Advanced > Export
+# and commit the resulting file to raycast/raycast.rayconfig.

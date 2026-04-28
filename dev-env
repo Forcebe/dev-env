@@ -101,14 +101,50 @@ log_section "ready-tmux scripts"
 log_step "Copying .ready-tmux"
 copy_file home/.ready-tmux $HOME
 
+# --- Secrets injection (both layers; templates live in home/.zshrc) ---
+
+log_section "1Password secrets injection"
+if ! command -v op &>/dev/null; then
+	log_skip "op CLI not installed, skipping secrets injection"
+	log_manual "Install 1Password CLI + sign in, then re-run './dev-env' to populate secrets in ~/.zshrc"
+elif ! op_account_ready; then
+	log_skip "No signed-in 1Password account for layer=$CURRENT_LAYER, skipping secrets injection"
+	log_manual "Sign in to the ${CURRENT_LAYER} 1Password account, then re-run './dev-env'"
+else
+	op_account=$(resolve_op_account)
+	log_step "Injecting secrets into .zshrc (account=$op_account)"
+	log_step "1Password may pop up a biometric/password prompt — approve it when it appears"
+
+	inject_succeeded=0
+	while true; do
+		if execute op inject -i "$HOME/.zshrc" -o "$HOME/.zshrc.tmp" --account "$op_account"; then
+			execute mv "$HOME/.zshrc.tmp" "$HOME/.zshrc"
+			inject_succeeded=1
+			break
+		fi
+		execute rm -f "$HOME/.zshrc.tmp"
+		if [[ ! -t 0 ]]; then
+			break
+		fi
+		echo ""
+		echo "  op inject failed — the 1Password prompt likely timed out or was not approved."
+		echo "    [Enter]  retry (approve the 1Password prompt first)"
+		echo "    s        skip secrets injection"
+		read -r -p "  op inject> " answer
+		case "$answer" in
+			s|S) break ;;
+			*) ;;
+		esac
+	done
+	if [[ "$inject_succeeded" == "0" ]]; then
+		log_skip "Secrets injection not completed, .zshrc left untouched"
+		log_manual "Re-run './dev-env' after approving the 1Password prompt"
+	fi
+fi
+
 # --- Work overlay (only when layer=work) ---
 
 if [[ "$CURRENT_LAYER" == "work" ]]; then
-	log_section "Work secrets injection"
-	log_step "Injecting 1Password secrets (work) into .zshrc"
-	execute op inject -i "$HOME/.zshrc" -o "$HOME/.zshrc.tmp" --account tmrw-health.1password.com
-	execute mv "$HOME/.zshrc.tmp" "$HOME/.zshrc"
-
 	log_section "Work config overlays"
 	log_step "Copying work .gitconfig"
 	copy_file home-work/.gitconfig $HOME

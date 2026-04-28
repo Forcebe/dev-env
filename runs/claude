@@ -3,6 +3,11 @@
 source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 
 log_section "Claude Code"
+orphan_npm="/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code"
+if [[ -d "$orphan_npm" ]]; then
+	log_step "Removing orphaned npm install at $orphan_npm"
+	execute rm -rf "$orphan_npm"
+fi
 if claude --version &>/dev/null; then
 	log_skip "Already installed, updating"
 	execute claude update
