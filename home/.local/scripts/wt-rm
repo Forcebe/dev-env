@@ -47,13 +47,16 @@ remove_worktree() {
 	local wt_dir="$1"
 	local wt_force="$2"
 
-	kill_session "$wt_dir"
-
+	# Remove the worktree first; if git rejects it (dirty state, locked,
+	# missing working dir, etc.) we exit via `set -e` with the session intact
+	# so the user can re-attach and resolve the issue.
 	if [[ "$wt_force" == "true" ]]; then
 		git worktree remove --force "$wt_dir"
 	else
 		git worktree remove "$wt_dir"
 	fi
+
+	kill_session "$wt_dir"
 }
 
 # --all mode: remove multiple worktrees
@@ -176,6 +179,21 @@ fi
 if [[ ! -d "$worktree_dir" ]]; then
 	echo "Error: worktree not found at $worktree_dir" >&2
 	exit 1
+fi
+
+# If the worktree is dirty and --force wasn't passed, show the changes
+# and prompt — saves the user from a failed `git worktree remove` followed
+# by manually re-running with --force.
+if [[ "$force" == "false" && -n "$(git -C "$worktree_dir" status --porcelain 2>/dev/null)" ]]; then
+	echo "$(basename "$worktree_dir") has uncommitted changes:"
+	git -C "$worktree_dir" status --short
+	echo ""
+	read -rp "Remove anyway? [y/N] " confirm
+	if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+		echo "Cancelled"
+		exit 0
+	fi
+	force=true
 fi
 
 remove_worktree "$worktree_dir" "$force"
