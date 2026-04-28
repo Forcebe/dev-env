@@ -7,12 +7,7 @@ CURSOR_CLI="/Applications/Cursor.app/Contents/Resources/app/bin/cursor"
 # ====== Install Cursor ======
 
 log_section "Cursor"
-if [[ -d "/Applications/Cursor.app" ]]; then
-	log_skip "Already installed"
-else
-	log_step "Installing Cursor"
-	brew_cask_install cursor
-fi
+ensure_cask_app cursor "/Applications/Cursor.app"
 
 # ====== CLI ======
 

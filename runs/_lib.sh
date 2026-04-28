@@ -73,3 +73,32 @@ brew_cask_install() {
 		execute brew install --cask "$cask"
 	done
 }
+
+# Returns 0 if a macOS .app bundle exists and is well-formed.
+# Catches gutted bundles (interrupted install/update) where the directory
+# survives but Info.plist or the executable are missing.
+app_installed() {
+	local app="$1"
+	[[ -f "$app/Contents/Info.plist" ]] || return 1
+	local entries=("$app"/Contents/MacOS/*)
+	[[ -e "${entries[0]}" ]]
+}
+
+# Install a macOS app via Homebrew Cask, repairing corrupt bundles
+# (gutted directory, missing executable) by removing them first.
+ensure_cask_app() {
+	local cask="$1"
+	local app_path="$2"
+
+	if app_installed "$app_path"; then
+		log_skip "Already installed"
+		return
+	fi
+
+	if [[ -d "$app_path" ]]; then
+		log_step "Removing corrupt $(basename "$app_path") bundle"
+		execute rm -rf "$app_path"
+	fi
+
+	brew_cask_install "$cask"
+}

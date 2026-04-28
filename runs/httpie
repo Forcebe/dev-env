@@ -6,8 +6,4 @@ log_section "HTTPie CLI"
 brew_install httpie
 
 log_section "HTTPie Desktop"
-if [[ -d "/Applications/HTTPie.app" ]]; then
-	log_skip "Already installed"
-else
-	brew_cask_install httpie-desktop
-fi
+ensure_cask_app httpie-desktop "/Applications/HTTPie.app"

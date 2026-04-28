@@ -5,9 +5,13 @@ source "$(dirname "${BASH_SOURCE[0]:-$0}")/_lib.sh"
 _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 
 log_section "Raycast"
-if [[ -d "/Applications/Raycast.app" ]]; then
+if app_installed "/Applications/Raycast.app"; then
 	log_skip "Already installed"
 else
+	if [[ -d "/Applications/Raycast.app" ]]; then
+		log_step "Removing corrupt Raycast.app bundle"
+		execute rm -rf "/Applications/Raycast.app"
+	fi
 	brew_cask_install raycast
 	log_manual "Open Raycast and import config: run 'Import Settings & Data' and select $_script_dir/raycast/raycast.rayconfig"
 	log_manual "In macOS System Settings > Keyboard > Keyboard Shortcuts > Spotlight, disable 'Show Spotlight search' (Cmd+Space)"
