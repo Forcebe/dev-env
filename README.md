@@ -45,7 +45,7 @@ Scripts run in dependency order. `dev-env` depends on `repos`; all other scripts
 
 | Script | What it does |
 |---|---|
-| **repos** | Clones personal repos (`zmk-config-hsv`, `qmk_firmware`); work repos when layer=work (`tmrw-core-api`, `tmrw-protocols`, `tmrw-client`) |
+| **repos** | Clones personal repos (`zmk-config-hsv`, `qmk_firmware`); work repos when layer=work (`tmrw-core-api`, `tmrw-protocols`, `tmrw-client`, `nucleus`) |
 | **dev-env** | Deploys all config files from `home/` and work overlays from `home-work/` |
 | **homebrew** | Installs Homebrew and configures shell profile |
 | **1password** | 1Password app + CLI, verifies auth |

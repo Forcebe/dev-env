@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Tmux session layout for the tmrw workspace, called by tmux-sessionizer.
+# Tmux session layout for nucleus, called by tmux-sessionizer.
 # Deployed by dev-env and excluded from git via .git/info/exclude.
 # Source: https://github.com/Forcebe/dev-env
 
 session=$1
 dir=$2
 
-tmux rename-window -t "=$session:0" "tmrw-dev"
+tmux rename-window -t "=$session:0" "nucleus-dev"
 pane=$(tmux list-panes -t "=$session:0" -F '#{pane_id}' | head -1)
 tmux send-keys -t "$pane" "nvim ." Enter
 new_pane=$(tmux split-window -v -t "$pane" -c "$dir" -PF '#{pane_id}')
@@ -14,9 +14,7 @@ bottom_right=$(tmux split-window -h -t "$new_pane" -c "$dir" -PF '#{pane_id}')
 tmux send-keys -t "$bottom_right" "claude" Enter
 tmux select-pane -t "$pane"
 
-tmux new-window -t "=$session" -n "core-run" -c "$HOME/tmrw/tmrw-core-api"
-tmux new-window -t "=$session" -n "oracle-run" -c "$HOME/tmrw/tmrw-protocols"
-tmux new-window -t "=$session" -n "atlas-run" -c "$HOME/tmrw/tmrw-client"
-tmux new-window -t "=$session" -n "nucleus-run" -c "$HOME/tmrw/nucleus"
-
-tmux select-window -t "=$session:tmrw-dev"
+tmux new-window -t "=$session" -n "nucleus-run" -c "$dir"
+run_pane=$(tmux list-panes -t "=$session:nucleus-run" -F '#{pane_id}' | head -1)
+tmux send-keys -t "$run_pane" "npm install && npm run storybook" Enter
+tmux select-window -t "=$session:nucleus-dev"

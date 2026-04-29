@@ -159,7 +159,7 @@ if [[ "$CURRENT_LAYER" == "work" ]]; then
 	if [[ "$DRY" == "0" ]]; then
 		cp "$script_dir/tmrw/tmrw.ready-tmux" "$HOME/tmrw/.ready-tmux"
 	fi
-	for repo in tmrw-client tmrw-protocols tmrw-core-api; do
+	for repo in tmrw-client tmrw-protocols tmrw-core-api nucleus; do
 		repo_dir="$HOME/tmrw/$repo"
 		log_step "cp tmrw/$repo.ready-tmux -> ~/tmrw/$repo/.ready-tmux"
 		if [[ "$DRY" == "0" ]]; then

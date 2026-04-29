@@ -25,4 +25,5 @@ if [[ "$CURRENT_LAYER" == "work" ]]; then
 	ensure_cloned git@github.com:tmrw-health/tmrw-core-api.git "$HOME/tmrw/tmrw-core-api"
 	ensure_cloned git@github.com:tmrw-health/tmrw-protocols.git "$HOME/tmrw/tmrw-protocols"
 	ensure_cloned git@github.com:tmrw-health/tmrw-client.git "$HOME/tmrw/tmrw-client"
+	ensure_cloned git@github.com:tmrw-health/nucleus.git "$HOME/tmrw/nucleus"
 fi
