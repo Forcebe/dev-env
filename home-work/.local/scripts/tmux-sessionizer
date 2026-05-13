@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
 
+# Background-prune merged worktrees at most once per hour.
+# Touch the stamp before forking so a rapid second invocation can't
+# kick off a duplicate pass.
+WT_PRUNE_STAMP="$HOME/.cache/wt-prune-last"
+mkdir -p "$(dirname "$WT_PRUNE_STAMP")"
+prune_now=$(date +%s)
+prune_last=$(stat -f %m "$WT_PRUNE_STAMP" 2>/dev/null || echo 0)
+if (( prune_now - prune_last > 3600 )); then
+	touch "$WT_PRUNE_STAMP"
+	# Subshell forks wt-prune into the background and then exits, orphaning
+	# the child so this script never waits on it.
+	(wt-prune >/dev/null 2>&1 &)
+fi
+
 # Display aliases for work repos
 alias_name() {
 	case "$1" in

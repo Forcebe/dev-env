@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+	echo "Usage: wt-prune [--dry]"
+	echo ""
+	echo "Remove worktrees under ~/tmrw whose branch has been merged"
+	echo "(detected as: branch.<name>.remote is configured AND"
+	echo "origin/<name> is gone after fetch --prune)."
+	echo ""
+	echo "Skips dirty worktrees and never-pushed branches."
+	echo ""
+	echo "Options:"
+	echo "  --dry    List candidates and fire notification, but do not remove"
+	exit 1
+}
+
+dry=false
+for arg in "$@"; do
+	case "$arg" in
+		--dry) dry=true ;;
+		-h|--help) usage ;;
+		*) echo "Unknown option: $arg" >&2; usage ;;
+	esac
+done
+
+shopt -s nullglob
+worktree_dirs=("$HOME/tmrw"/*--*/)
+shopt -u nullglob
+
+[[ ${#worktree_dirs[@]} -eq 0 ]] && exit 0
+
+# Build parallel arrays: wt_list[i] and main_list[i] are the worktree
+# and its main checkout. Dedup mains into unique_mains so we fetch once
+# per repo. Bash 3.2 on macOS has no associative arrays, hence the
+# parallel-arrays approach.
+wt_list=()
+main_list=()
+unique_mains=()
+fetch_ok_mains=()
+
+for wt in "${worktree_dirs[@]}"; do
+	wt="${wt%/}"
+	main=$(git -C "$wt" worktree list --porcelain 2>/dev/null | head -1 | sed 's/^worktree //')
+	[[ -z "$main" ]] && continue
+	wt_list+=("$wt")
+	main_list+=("$main")
+	if [[ ! " ${unique_mains[*]:-} " == *" $main "* ]]; then
+		unique_mains+=("$main")
+	fi
+done
+
+for main in "${unique_mains[@]}"; do
+	if git -C "$main" fetch --prune --quiet 2>/dev/null; then
+		fetch_ok_mains+=("$main")
+	fi
+done
+
+kill_session() {
+	local dir="$1"
+	local session_name
+	session_name=$(basename "$dir" | tr ".,: " "____")
+	tmux kill-session -t "$session_name" 2>/dev/null || true
+}
+
+removed=()
+
+for i in "${!wt_list[@]}"; do
+	wt="${wt_list[$i]}"
+	main="${main_list[$i]}"
+	# Skip worktrees whose main checkout's fetch failed
+	[[ " ${fetch_ok_mains[*]:-} " == *" $main "* ]] || continue
+
+	branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+	[[ -z "$branch" || "$branch" == "HEAD" ]] && continue
+
+	# Must have been pushed at some point — otherwise we can't infer "merged"
+	git -C "$wt" config --get "branch.${branch}.remote" >/dev/null 2>&1 || continue
+
+	# Remote still exists → not merged
+	if git -C "$wt" show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
+		continue
+	fi
+
+	# Dirty → leave alone
+	if [[ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]]; then
+		continue
+	fi
+
+	if [[ "$dry" == "true" ]]; then
+		echo "would remove: $(basename "$wt")"
+	else
+		kill_session "$wt"
+		git -C "$main" worktree remove --force "$wt" 2>/dev/null || continue
+	fi
+	removed+=("$(basename "$wt")")
+done
+
+if [[ ${#removed[@]} -gt 0 ]]; then
+	if [[ "$dry" == "true" ]]; then
+		title="Worktrees would be pruned (dry)"
+	else
+		title="Worktrees pruned"
+	fi
+	summary=$(IFS=, ; echo "${removed[*]}")
+	# Escape double quotes for AppleScript
+	summary_escaped=${summary//\"/\\\"}
+	osascript -e "display notification \"${summary_escaped}\" with title \"${title}\"" >/dev/null 2>&1 || true
+fi
