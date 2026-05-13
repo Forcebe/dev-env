@@ -43,6 +43,33 @@ kill_session() {
 	tmux kill-session -t "$session_name" 2>/dev/null || true
 }
 
+# List current repo's worktrees (excluding main checkout).
+# Output: "<dir>\t<branch>" per line.
+list_worktrees() {
+	git worktree list --porcelain 2>/dev/null | awk '
+		/^worktree / { path = substr($0, 10); next }
+		/^branch refs\/heads\// { branch = substr($0, 19); print path "\t" branch }
+	' | tail -n +2
+}
+
+# Open fzf over current repo's worktrees and echo the selected dir.
+# Optional first arg pre-fills the query; --select-1 auto-picks a
+# unique match. Returns non-zero on missing fzf or user cancellation.
+pick_worktree() {
+	command -v fzf >/dev/null 2>&1 || return 1
+	local query="${1:-}"
+	list_worktrees | awk -F'\t' '{
+		dirty = ""
+		cmd = "git -C \"" $1 "\" status --porcelain 2>/dev/null"
+		if ((cmd | getline _) > 0) dirty = " (dirty)"
+		close(cmd)
+		n = split($1, parts, "/")
+		printf "%s\t%s%s\t%s\n", parts[n], $2, dirty, $1
+	}' | fzf --query "$query" --select-1 --exit-0 \
+	         --delimiter $'\t' --with-nth 1,2 \
+	  | cut -f3
+}
+
 remove_worktree() {
 	local wt_dir="$1"
 	local wt_force="$2"
@@ -150,18 +177,16 @@ if [[ -n "$positional" ]]; then
 		# Argument is a path
 		worktree_dir="$positional"
 	else
-		# Argument is a branch name — find the worktree dir
-		main_dir=$(git worktree list --porcelain 2>/dev/null | head -1 | sed 's/^worktree //')
-		if [[ -z "$main_dir" ]]; then
-			echo "Error: not inside a git repository" >&2
+		# Argument is a branch name, dir suffix, or fuzzy query — let fzf
+		# pre-filter with --select-1 to auto-pick an unambiguous match.
+		worktree_dir=$(pick_worktree "$positional" || true)
+		if [[ -z "$worktree_dir" ]]; then
+			echo "No matching worktree" >&2
 			exit 1
 		fi
-		repo_basename=$(basename "$main_dir")
-		dir_suffix=$(echo "$positional" | tr '/' '-')
-		worktree_dir="$(dirname "$main_dir")/${repo_basename}--${dir_suffix}"
 	fi
 else
-	# No argument — use current directory if it's a worktree
+	# No argument — use current directory if it's a worktree, else open picker
 	git_dir=$(git rev-parse --git-dir 2>/dev/null || true)
 	if [[ -z "$git_dir" ]]; then
 		echo "Error: not inside a git repository" >&2
@@ -169,11 +194,14 @@ else
 	fi
 	# Worktrees have .git files pointing to main repo, not .git directories
 	if [[ -d "$git_dir" && "$git_dir" == *".git" ]]; then
-		echo "Error: current directory is the main checkout, not a worktree" >&2
-		echo "Provide a branch name or path, or use --all" >&2
-		exit 1
+		worktree_dir=$(pick_worktree || true)
+		if [[ -z "$worktree_dir" ]]; then
+			echo "Cancelled" >&2
+			exit 0
+		fi
+	else
+		worktree_dir=$(pwd)
 	fi
-	worktree_dir=$(pwd)
 fi
 
 if [[ ! -d "$worktree_dir" ]]; then

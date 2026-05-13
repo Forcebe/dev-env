@@ -24,8 +24,14 @@ fi
 
 repo_basename=$(basename "$main_dir")
 
-# Sanitize branch name for directory: feat/login -> feat-login
-dir_suffix=$(echo "$branch" | tr '/' '-')
+# Worktree dir naming: prefer the TMRW ticket reference for brevity
+# (`nick/TMRW-1229-...` -> `TMRW-1229`); fall back to a 20-char slice of
+# the sanitised branch.
+if [[ "$branch" =~ ([Tt][Mm][Rr][Ww]-[0-9]+) ]]; then
+	dir_suffix=$(echo "${BASH_REMATCH[1]}" | tr '[:lower:]' '[:upper:]')
+else
+	dir_suffix=$(echo "$branch" | tr '/' '-' | cut -c1-20 | sed 's/-*$//')
+fi
 worktree_dir="$(dirname "$main_dir")/${repo_basename}--${dir_suffix}"
 
 if [[ -d "$worktree_dir" ]]; then
