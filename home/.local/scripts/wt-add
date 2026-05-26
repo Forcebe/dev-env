@@ -24,13 +24,31 @@ fi
 
 repo_basename=$(basename "$main_dir")
 
-# Worktree dir naming: prefer the TMRW ticket reference for brevity
-# (`nick/TMRW-1229-...` -> `TMRW-1229`); fall back to a 20-char slice of
-# the sanitised branch.
-if [[ "$branch" =~ ([Tt][Mm][Rr][Ww]-[0-9]+) ]]; then
-	dir_suffix=$(echo "${BASH_REMATCH[1]}" | tr '[:lower:]' '[:upper:]')
+# Worktree dir naming: keep a leading name segment (e.g. `nick/...`),
+# but strip conventional commit prefixes (feat/fix/chore/etc). Then
+# prefer the TMRW ticket for brevity; fall back to a 20-char slice of
+# the sanitised remainder.
+prefix=""
+rest="$branch"
+if [[ "$branch" == */* ]]; then
+	first="${branch%%/*}"
+	tail_part="${branch#*/}"
+	case "$(echo "$first" | tr '[:upper:]' '[:lower:]')" in
+		feat|fix|chore|docs|refactor|perf|test|style|build|ci|revert|hotfix|wip)
+			rest="$tail_part"
+			;;
+		*)
+			prefix="${first}-"
+			rest="$tail_part"
+			;;
+	esac
+fi
+
+if [[ "$rest" =~ ([Tt][Mm][Rr][Ww]-[0-9]+) ]]; then
+	dir_suffix="${prefix}$(echo "${BASH_REMATCH[1]}" | tr '[:lower:]' '[:upper:]')"
 else
-	dir_suffix=$(echo "$branch" | tr '/' '-' | cut -c1-20 | sed 's/-*$//')
+	tail_slug=$(echo "$rest" | tr '/' '-' | cut -c1-20 | sed 's/-*$//')
+	dir_suffix="${prefix}${tail_slug}"
 fi
 worktree_dir="$(dirname "$main_dir")/${repo_basename}--${dir_suffix}"
 
