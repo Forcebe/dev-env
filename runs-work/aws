@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# DEPS: dev-env homebrew
+source "$(dirname "${BASH_SOURCE[0]:-$0}")/../runs/_lib.sh"
+
+AWS_SSO_PROFILE="tmrw"
+
+log_section "AWS CLI"
+brew_install awscli
+brew_install session-manager-plugin
+
+# AWS_PROFILE goes in ~/.zshrc.local, not ~/.zshrc — dev-env regenerates
+# ~/.zshrc from home/.zshrc on every run, which would wipe a direct append.
+# home/.zshrc sources ~/.zshrc.local if present.
+ZSHRC_LOCAL="$HOME/.zshrc.local"
+
+if [[ "$DRY" == "1" ]]; then
+	echo "  [dry] would run 'aws configure sso --profile $AWS_SSO_PROFILE' and export AWS_PROFILE=$AWS_SSO_PROFILE in ~/.zshrc.local"
+elif aws configure list-profiles 2>/dev/null | grep -qx "$AWS_SSO_PROFILE"; then
+	log_skip "SSO profile '$AWS_SSO_PROFILE' already configured"
+elif [[ ! -t 0 ]]; then
+	log_skip "Non-interactive shell — skipping AWS SSO setup"
+	log_manual "Run 'aws configure sso --profile $AWS_SSO_PROFILE' to finish AWS setup"
+else
+	log_step "Configuring SSO profile '$AWS_SSO_PROFILE'"
+	aws configure sso --profile "$AWS_SSO_PROFILE"
+fi
+
+if [[ -f "$ZSHRC_LOCAL" ]] && grep -q '^export AWS_PROFILE=' "$ZSHRC_LOCAL"; then
+	log_skip "AWS_PROFILE already exported in ~/.zshrc.local"
+elif [[ "$DRY" == "0" ]]; then
+	log_step "Exporting AWS_PROFILE=$AWS_SSO_PROFILE in ~/.zshrc.local"
+	echo "export AWS_PROFILE=$AWS_SSO_PROFILE" >> "$ZSHRC_LOCAL"
+fi

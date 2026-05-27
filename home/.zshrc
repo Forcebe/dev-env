@@ -49,6 +49,8 @@ bindkey -s ^f "tmux-sessionizer\n"
 addToPath $HOME/.local/scripts
 # add bin to path for claude code
 addToPath $HOME/.local/bin
+# PostgreSQL client tools (pg_isready, psql) — keg-only formula, work layer only
+[ -d /opt/homebrew/opt/postgresql@17/bin ] && addToPath /opt/homebrew/opt/postgresql@17/bin
 
 
 # Aliases
@@ -175,3 +177,6 @@ done
 # Function calls
 # Run starship prompt
 eval "$(starship init zsh)"
+
+# Machine-local overrides (not managed by dev-env; e.g. AWS_PROFILE)
+[ -f ~/.zshrc.local ] && source ~/.zshrc.local

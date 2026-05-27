@@ -92,3 +92,5 @@ The `home-work/` directory contains only files that differ from personal — cur
 ### Work scripts (runs-work/)
 
 These only run when `CURRENT_LAYER=work`. They can depend on personal scripts (e.g. `postgresql` depends on `homebrew`). Layer-aware personal scripts (like `repos`) check `CURRENT_LAYER` internally rather than being split into separate work scripts.
+
+`aws` installs the AWS CLI, runs `aws configure sso` interactively (gated on a TTY), and exports `AWS_PROFILE`. The export is written to `~/.zshrc.local`, **not** `~/.zshrc` — `dev-env` regenerates `~/.zshrc` from `home/.zshrc` every run, so a direct append would be wiped. `home/.zshrc` sources `~/.zshrc.local` if present; that file is machine-local, never managed by dev-env, and is the place for non-secret per-machine env overrides.
