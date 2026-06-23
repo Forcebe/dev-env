@@ -2,11 +2,15 @@
 set -euo pipefail
 
 STALE_DAYS=14
+ACTIVE_HOURS=24
 
 usage() {
 	echo "Usage: wt-prune [--dry] [--stale-days N]"
 	echo ""
-	echo "Remove worktrees under ~/tmrw that are safe to drop:"
+	echo "Remove worktrees under ~/tmrw that are safe to drop. Worktrees in"
+	echo "active use are never removed: any file touched in the last"
+	echo "${ACTIVE_HOURS}h, or a live tmux session, exempts a worktree (covers an"
+	echo "open planning/agent session that hasn't committed yet)."
 	echo ""
 	echo "  Auto-pruned (clean working tree, no confirmation):"
 	echo "    - branch fully merged by content (empty diff vs"
@@ -88,6 +92,17 @@ remove_wt() {
 	git -C "$main" worktree remove --force "$wt" 2>/dev/null
 }
 
+# A worktree touched within ACTIVE_HOURS, or with a live tmux session, is
+# presumed in use — an open planning/agent session may have made no commits
+# and no tracked changes yet, so neither git nor dirtiness reveals it.
+# node_modules/.git are pruned from the file scan for speed.
+recently_active() {
+	local wt="$1" session
+	session=$(basename "$wt" | tr ".,: " "____")
+	tmux has-session -t "$session" 2>/dev/null && return 0
+	[[ -n "$(find "$wt" \( -name node_modules -o -name .git \) -prune -o -type f -mmin "-$((ACTIVE_HOURS * 60))" -print -quit 2>/dev/null)" ]]
+}
+
 # Branch introduces nothing not already in a remote base → its content is
 # merged, even if the branch itself was never pushed. Three-dot diff so we
 # only look at what the branch added since it forked, not how far the base
@@ -131,6 +146,13 @@ for i in "${!wt_list[@]}"; do
 	branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 	[[ -z "$branch" || "$branch" == "HEAD" ]] && continue
 
+	name=$(basename "$wt")
+
+	if recently_active "$wt"; then
+		[[ "$dry" == "true" ]] && echo "skip (active <${ACTIVE_HOURS}h): $name"
+		continue
+	fi
+
 	dirty=false
 	[[ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]] && dirty=true
 
@@ -141,8 +163,6 @@ for i in "${!wt_list[@]}"; do
 	if [[ "$pushed" == "true" ]] && ! git -C "$wt" show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
 		remote_gone=true
 	fi
-
-	name=$(basename "$wt")
 
 	# Safe auto-prune: clean tree whose work is already on the remote,
 	# either by content or by the pushed-then-deleted signal. The branch
