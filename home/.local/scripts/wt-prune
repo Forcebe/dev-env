@@ -1,28 +1,47 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+STALE_DAYS=14
+
 usage() {
-	echo "Usage: wt-prune [--dry]"
+	echo "Usage: wt-prune [--dry] [--stale-days N]"
 	echo ""
-	echo "Remove worktrees under ~/tmrw whose branch has been merged"
-	echo "(detected as: branch.<name>.remote is configured AND"
-	echo "origin/<name> is gone after fetch --prune)."
+	echo "Remove worktrees under ~/tmrw that are safe to drop:"
 	echo ""
-	echo "Skips dirty worktrees and never-pushed branches."
+	echo "  Auto-pruned (clean working tree, no confirmation):"
+	echo "    - branch fully merged by content (empty diff vs"
+	echo "      origin/develop, origin/main, or origin/master), OR"
+	echo "    - branch was pushed and origin/<branch> is gone after"
+	echo "      fetch --prune (the classic merged signal)."
+	echo ""
+	echo "  Confirmed per-branch (stale + unbacked work):"
+	echo "    - last commit older than N days (default ${STALE_DAYS}) AND the"
+	echo "      branch was never pushed or the tree is dirty. These hold"
+	echo "      work with no remote backup, so each is confirmed before"
+	echo "      removal — via a terminal prompt when run interactively,"
+	echo "      or a macOS dialog (default: Keep) when run in background."
 	echo ""
 	echo "Options:"
-	echo "  --dry    List candidates and fire notification, but do not remove"
+	echo "  --dry          List candidates and fire notification, but do not remove"
+	echo "  --stale-days N  Inactivity threshold for the confirm path (default ${STALE_DAYS})"
 	exit 1
 }
 
 dry=false
-for arg in "$@"; do
-	case "$arg" in
+while [[ $# -gt 0 ]]; do
+	case "$1" in
 		--dry) dry=true ;;
+		--stale-days)
+			shift
+			[[ $# -gt 0 && "$1" =~ ^[0-9]+$ ]] || { echo "--stale-days needs a number" >&2; usage; }
+			STALE_DAYS="$1" ;;
 		-h|--help) usage ;;
-		*) echo "Unknown option: $arg" >&2; usage ;;
+		*) echo "Unknown option: $1" >&2; usage ;;
 	esac
+	shift
 done
+
+now=$(date +%s)
 
 shopt -s nullglob
 worktree_dirs=("$HOME/tmrw"/*--*/)
@@ -63,6 +82,44 @@ kill_session() {
 	tmux kill-session -t "$session_name" 2>/dev/null || true
 }
 
+remove_wt() {
+	local wt="$1" main="$2"
+	kill_session "$wt"
+	git -C "$main" worktree remove --force "$wt" 2>/dev/null
+}
+
+# Branch introduces nothing not already in a remote base → its content is
+# merged, even if the branch itself was never pushed. Three-dot diff so we
+# only look at what the branch added since it forked, not how far the base
+# moved on. --quiet exits 0 when there's no diff; non-zero (1 = has diff,
+# 128 = bad ref) means not-merged-against-this-base, so we try the next.
+is_content_merged() {
+	local wt="$1" base
+	for base in develop main master; do
+		git -C "$wt" rev-parse --verify --quiet "origin/$base" >/dev/null 2>&1 || continue
+		if git -C "$wt" diff --quiet "origin/${base}...HEAD" 2>/dev/null; then
+			return 0
+		fi
+	done
+	return 1
+}
+
+# Ask before deleting unbacked work. A TTY gets a terminal prompt; a
+# detached background run (the sessionizer fork) gets a macOS dialog that
+# defaults to Keep and auto-dismisses, so an unattended pass never deletes.
+confirm_delete() {
+	local prompt="$1" btn
+	if [[ -t 0 ]]; then
+		local ans
+		read -r -p "$prompt [y/N] " ans </dev/tty || return 1
+		[[ "$ans" == "y" || "$ans" == "Y" ]]
+	else
+		local msg=${prompt//\"/\\\"}
+		btn=$(osascript -e "display dialog \"${msg}\" buttons {\"Keep\", \"Delete\"} default button \"Keep\" with title \"Stale worktree\" giving up after 120" 2>/dev/null) || return 1
+		[[ "$btn" == *"button returned:Delete"* ]]
+	fi
+}
+
 removed=()
 
 for i in "${!wt_list[@]}"; do
@@ -74,26 +131,51 @@ for i in "${!wt_list[@]}"; do
 	branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 	[[ -z "$branch" || "$branch" == "HEAD" ]] && continue
 
-	# Must have been pushed at some point — otherwise we can't infer "merged"
-	git -C "$wt" config --get "branch.${branch}.remote" >/dev/null 2>&1 || continue
+	dirty=false
+	[[ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]] && dirty=true
 
-	# Remote still exists → not merged
-	if git -C "$wt" show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
+	pushed=false
+	git -C "$wt" config --get "branch.${branch}.remote" >/dev/null 2>&1 && pushed=true
+
+	remote_gone=false
+	if [[ "$pushed" == "true" ]] && ! git -C "$wt" show-ref --verify --quiet "refs/remotes/origin/${branch}"; then
+		remote_gone=true
+	fi
+
+	name=$(basename "$wt")
+
+	# Safe auto-prune: clean tree whose work is already on the remote,
+	# either by content or by the pushed-then-deleted signal. The branch
+	# ref survives `worktree remove`, so this is recoverable via wt-add.
+	if [[ "$dirty" == "false" ]] && { [[ "$remote_gone" == "true" ]] || is_content_merged "$wt"; }; then
+		if [[ "$dry" == "true" ]]; then
+			echo "would remove (merged): $name"
+		else
+			remove_wt "$wt" "$main" || continue
+		fi
+		removed+=("$name")
 		continue
 	fi
 
-	# Dirty → leave alone
-	if [[ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]]; then
+	# Stale + unbacked: old branch that was never pushed, or a dirty tree
+	# whose changes exist nowhere else. Confirm each before removing.
+	last=$(git -C "$wt" log -1 --format=%ct 2>/dev/null || echo "")
+	[[ -z "$last" ]] && continue
+	if (( now - last > STALE_DAYS * 86400 )) && { [[ "$pushed" == "false" ]] || [[ "$dirty" == "true" ]]; }; then
+		if [[ "$dirty" == "true" ]]; then
+			reason="dirty, uncommitted changes only here"
+		else
+			reason="never pushed, commits only here"
+		fi
+		if [[ "$dry" == "true" ]]; then
+			echo "would prompt (stale, $reason): $name"
+			continue
+		fi
+		if confirm_delete "Delete stale worktree '${name}' (${reason})?"; then
+			remove_wt "$wt" "$main" && removed+=("$name")
+		fi
 		continue
 	fi
-
-	if [[ "$dry" == "true" ]]; then
-		echo "would remove: $(basename "$wt")"
-	else
-		kill_session "$wt"
-		git -C "$main" worktree remove --force "$wt" 2>/dev/null || continue
-	fi
-	removed+=("$(basename "$wt")")
 done
 
 if [[ ${#removed[@]} -gt 0 ]]; then
