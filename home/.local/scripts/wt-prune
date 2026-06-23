@@ -9,8 +9,9 @@ usage() {
 	echo ""
 	echo "Remove worktrees under ~/tmrw that are safe to drop. Worktrees in"
 	echo "active use are never removed: any file touched in the last"
-	echo "${ACTIVE_HOURS}h, or a live tmux session, exempts a worktree (covers an"
-	echo "open planning/agent session that hasn't committed yet)."
+	echo "${ACTIVE_HOURS}h, or a tmux session attached or active within ${ACTIVE_HOURS}h, exempts"
+	echo "a worktree (covers an open planning/agent session that hasn't"
+	echo "committed yet). A merely-existing idle session does not."
 	echo ""
 	echo "  Auto-pruned (clean working tree, no confirmation):"
 	echo "    - branch fully merged by content (empty diff vs"
@@ -92,14 +93,23 @@ remove_wt() {
 	git -C "$main" worktree remove --force "$wt" 2>/dev/null
 }
 
-# A worktree touched within ACTIVE_HOURS, or with a live tmux session, is
-# presumed in use — an open planning/agent session may have made no commits
-# and no tracked changes yet, so neither git nor dirtiness reveals it.
-# node_modules/.git are pruned from the file scan for speed.
+# A worktree in active use is presumed unsafe to remove — an open
+# planning/agent session may have made no commits and no tracked changes,
+# so neither git nor dirtiness reveals it. "Active" means: a file touched
+# within ACTIVE_HOURS, or a tmux session that is attached or saw output
+# within ACTIVE_HOURS. Session *existence* is deliberately NOT enough:
+# sessions linger for days until prune itself reaps them, so existence
+# would protect every worktree ever opened. node_modules/.git are pruned
+# from the file scan for speed.
 recently_active() {
-	local wt="$1" session
+	local wt="$1" session info attached activity
 	session=$(basename "$wt" | tr ".,: " "____")
-	tmux has-session -t "$session" 2>/dev/null && return 0
+	info=$(tmux list-sessions -f "#{==:#{session_name},${session}}" -F '#{session_attached} #{session_activity}' 2>/dev/null || true)
+	if [[ -n "$info" ]]; then
+		read -r attached activity <<<"$info"
+		[[ "${attached:-0}" -gt 0 ]] && return 0
+		[[ -n "${activity:-}" ]] && (( now - activity < ACTIVE_HOURS * 3600 )) && return 0
+	fi
 	[[ -n "$(find "$wt" \( -name node_modules -o -name .git \) -prune -o -type f -mmin "-$((ACTIVE_HOURS * 60))" -print -quit 2>/dev/null)" ]]
 }
 
