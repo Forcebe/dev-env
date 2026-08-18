@@ -2,10 +2,13 @@
 set -euo pipefail
 
 usage() {
-	echo "Usage: wt-add <branch-name>"
+	echo "Usage: wt-add <branch-name> [base-ref]"
 	echo ""
 	echo "Create a git worktree as a sibling directory with environment"
 	echo "bootstrapping, tmux session, and npm install."
+	echo ""
+	echo "New branches start from the repo's default branch, or from"
+	echo "[base-ref] if given (e.g. a parent branch for stacked PRs)."
 	echo ""
 	echo "Run from inside any git repository."
 	exit 1
@@ -14,6 +17,7 @@ usage() {
 [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]] && usage
 
 branch="$1"
+base_override="${2:-}"
 
 # Resolve main worktree root (works even if called from inside a worktree)
 main_dir=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
@@ -57,19 +61,51 @@ if [[ -d "$worktree_dir" ]]; then
 	exit 1
 fi
 
-# Fetch so remote PR branches are discoverable
+# Fetch so remote PR branches are discoverable and new branches start
+# from the latest base, not a stale local HEAD
 git fetch origin --quiet
 
+# Resolve the repo's default branch (origin/HEAD); fall back to local HEAD
+# when there's no remote or it can't be determined
+base_ref="HEAD"
+default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)
+if [[ -z "$default_branch" ]]; then
+	git remote set-head origin --auto >/dev/null 2>&1 || true
+	default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)
+fi
+[[ -n "$default_branch" ]] && base_ref="$default_branch"
+
+# An explicit base (e.g. stacking on a parent branch) overrides the default
+if [[ -n "$base_override" ]]; then
+	if git show-ref --verify --quiet "refs/heads/$base_override"; then
+		base_ref="$base_override"
+	elif git show-ref --verify --quiet "refs/remotes/origin/$base_override"; then
+		base_ref="origin/$base_override"
+	elif git rev-parse --verify --quiet "${base_override}^{commit}" >/dev/null; then
+		base_ref="$base_override"
+	else
+		echo "Error: base ref '$base_override' not found" >&2
+		exit 1
+	fi
+fi
+
 # Create the worktree
+if git show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null || git show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null; then
+	[[ -n "$base_override" ]] && echo "Note: branch '$branch' already exists — ignoring base '$base_override'"
+fi
 if git show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
-	# Local branch exists
+	# Local branch exists — fast-forward it to origin if safely possible
+	# (fails quietly if diverged, checked out elsewhere, or not on origin)
+	git fetch origin --quiet "$branch:$branch" 2>/dev/null || true
 	git worktree add "$worktree_dir" "$branch"
 elif git show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null; then
 	# Remote branch exists — git worktree add auto-tracks it
 	git worktree add "$worktree_dir" "$branch"
 else
-	# New branch from current HEAD
-	git worktree add -b "$branch" "$worktree_dir"
+	# New branch from the latest default branch; --no-track so the feature
+	# branch doesn't push back to the base branch
+	[[ "$base_ref" != "HEAD" ]] && echo "Branching from $base_ref"
+	git worktree add --no-track -b "$branch" "$worktree_dir" "$base_ref"
 fi
 
 # Copy .env.local from main checkout
@@ -108,7 +144,14 @@ if [[ -f "$worktree_dir/package.json" ]]; then
 	# The .ready-tmux layout creates window 1 as the "run" window
 	# Send npm install there
 	run_window=$(tmux list-windows -t "$session_name" -F '#{window_index}' | tail -1)
-	tmux send-keys -t "$session_name:$run_window" "npm install" Enter
+	target="$session_name:$run_window"
+	# Single-window layouts have no run window and focus the claude pane;
+	# target the spare shell pane so npm install isn't typed into claude
+	if [[ $(tmux list-windows -t "$session_name" | wc -l) -eq 1 ]]; then
+		spare_pane=$(tmux list-panes -t "$target" -F '#{pane_index}' | sed -n 2p)
+		[[ -n "$spare_pane" ]] && target="$target.$spare_pane"
+	fi
+	tmux send-keys -t "$target" "npm install" Enter
 	echo "npm install running in the run window"
 fi
 
