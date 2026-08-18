@@ -127,7 +127,7 @@ if [[ "$all" == "true" ]]; then
 		label="  $((i + 1)). $(basename "$wt")"
 		if [[ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]]; then
 			label+=" (dirty)"
-			((dirty_count++))
+			dirty_count=$((dirty_count + 1))
 		fi
 		echo "$label"
 	done
@@ -154,12 +154,12 @@ if [[ "$all" == "true" ]]; then
 		fi
 
 		if [[ "$is_dirty" == "true" && "$force" == "false" ]]; then
-			((skipped++))
+			skipped=$((skipped + 1))
 			continue
 		fi
 
 		remove_worktree "$wt" "$force"
-		((removed++))
+		removed=$((removed + 1))
 	done
 
 	total=${#worktrees[@]}
