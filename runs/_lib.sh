@@ -33,6 +33,16 @@ execute() {
 	"$@"
 }
 
+# Like execute, but discards the command's stdout (for noisy commands
+# like `op inject`, which prints its output path)
+execute_quiet() {
+	if [[ "$DRY" == "1" ]]; then
+		echo "  [dry] $*"
+		return
+	fi
+	"$@" >/dev/null
+}
+
 clone_or_pull() {
 	local repo_url="$1"
 	local target_dir="$2"

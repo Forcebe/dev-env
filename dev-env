@@ -117,7 +117,7 @@ else
 
 	inject_succeeded=0
 	while true; do
-		if execute op inject -i "$HOME/.zshrc" -o "$HOME/.zshrc.tmp" --account "$op_account"; then
+		if execute_quiet op inject -i "$HOME/.zshrc" -o "$HOME/.zshrc.tmp" --account "$op_account"; then
 			execute mv "$HOME/.zshrc.tmp" "$HOME/.zshrc"
 			inject_succeeded=1
 			break
