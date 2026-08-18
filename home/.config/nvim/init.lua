@@ -415,6 +415,9 @@ require('lazy').setup({
 
       -- Useful status updates for LSP.
       { 'j-hui/fidget.nvim', opts = {} },
+
+      -- JSON schemas for jsonls (package.json, tsconfig.json, etc.)
+      'b0o/schemastore.nvim',
     },
     config = function()
       -- Brief aside: **What is LSP?**
@@ -540,6 +543,17 @@ require('lazy').setup({
 
         -- Tailwind CSS LSP for class completions, hover previews, and diagnostics
         tailwindcss = {},
+
+        -- JSON LSP: syntax diagnostics plus schema validation/completion
+        -- for well-known files (package.json, tsconfig.json, etc.)
+        jsonls = {
+          settings = {
+            json = {
+              schemas = require('schemastore').json.schemas(),
+              validate = { enable = true },
+            },
+          },
+        },
 
         stylua = {}, -- Used to format Lua code
 
