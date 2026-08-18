@@ -13,11 +13,16 @@ usage() {
 	echo "a worktree (covers an open planning/agent session that hasn't"
 	echo "committed yet). A merely-existing idle session does not."
 	echo ""
-	echo "  Auto-pruned (clean working tree, no confirmation):"
+	echo "  Auto-pruned regardless of activity (only an attached session blocks):"
+	echo "    - clean tree, branch was pushed and origin/<branch> is gone"
+	echo "      after fetch --prune (the classic merged-and-deleted signal;"
+	echo "      a not-yet-started worktree can never look like this)."
+	echo ""
+	echo "  Auto-pruned when inactive for ${ACTIVE_HOURS}h (clean working tree):"
 	echo "    - branch fully merged by content (empty diff vs"
-	echo "      origin/develop, origin/main, or origin/master), OR"
-	echo "    - branch was pushed and origin/<branch> is gone after"
-	echo "      fetch --prune (the classic merged signal)."
+	echo "      origin/develop, origin/main, or origin/master). A fresh"
+	echo "      worktree also diffs empty against its base, hence the"
+	echo "      activity guard on this path."
 	echo ""
 	echo "  Confirmed per-branch (stale + unbacked work):"
 	echo "    - last commit older than N days (default ${STALE_DAYS}) AND the"
@@ -65,7 +70,7 @@ fetch_ok_mains=()
 
 for wt in "${worktree_dirs[@]}"; do
 	wt="${wt%/}"
-	main=$(git -C "$wt" worktree list --porcelain 2>/dev/null | head -1 | sed 's/^worktree //')
+	main=$(git -C "$wt" worktree list --porcelain 2>/dev/null | head -1 | sed 's/^worktree //') || true
 	[[ -z "$main" ]] && continue
 	wt_list+=("$wt")
 	main_list+=("$main")
@@ -113,6 +118,12 @@ recently_active() {
 	[[ -n "$(find "$wt" \( -name node_modules -o -name .git \) -prune -o -type f -mmin "-$((ACTIVE_HOURS * 60))" -print -quit 2>/dev/null)" ]]
 }
 
+session_attached() {
+	local session
+	session=$(basename "$1" | tr ".,: " "____")
+	[[ -n "$(tmux list-sessions -f "#{&&:#{==:#{session_name},${session}},#{session_attached}}" -F x 2>/dev/null)" ]]
+}
+
 # Branch introduces nothing not already in a remote base → its content is
 # merged, even if the branch itself was never pushed. Three-dot diff so we
 # only look at what the branch added since it forked, not how far the base
@@ -158,11 +169,6 @@ for i in "${!wt_list[@]}"; do
 
 	name=$(basename "$wt")
 
-	if recently_active "$wt"; then
-		[[ "$dry" == "true" ]] && echo "skip (active <${ACTIVE_HOURS}h): $name"
-		continue
-	fi
-
 	dirty=false
 	[[ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]] && dirty=true
 
@@ -174,10 +180,33 @@ for i in "${!wt_list[@]}"; do
 		remote_gone=true
 	fi
 
-	# Safe auto-prune: clean tree whose work is already on the remote,
-	# either by content or by the pushed-then-deleted signal. The branch
-	# ref survives `worktree remove`, so this is recoverable via wt-add.
-	if [[ "$dirty" == "false" ]] && { [[ "$remote_gone" == "true" ]] || is_content_merged "$wt"; }; then
+	# Pushed-then-deleted is the one finished signal a not-yet-started
+	# worktree can never show, so it bypasses the activity guard: the work
+	# is on the remote and the branch ref survives `worktree remove`.
+	# Only an attached session (you're sitting in it) still blocks.
+	if [[ "$dirty" == "false" && "$remote_gone" == "true" ]]; then
+		if session_attached "$wt"; then
+			[[ "$dry" == "true" ]] && echo "skip (attached): $name"
+			continue
+		fi
+		if [[ "$dry" == "true" ]]; then
+			echo "would remove (remote gone): $name"
+		else
+			remove_wt "$wt" "$main" || continue
+		fi
+		removed+=("$name")
+		continue
+	fi
+
+	if recently_active "$wt"; then
+		[[ "$dry" == "true" ]] && echo "skip (active <${ACTIVE_HOURS}h): $name"
+		continue
+	fi
+
+	# Content-merged auto-prune keeps the activity guard: a fresh worktree
+	# also diffs empty against its base, so activity is what separates
+	# "not started yet" from "finished but never had its remote deleted".
+	if [[ "$dirty" == "false" ]] && is_content_merged "$wt"; then
 		if [[ "$dry" == "true" ]]; then
 			echo "would remove (merged): $name"
 		else
