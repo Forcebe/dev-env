@@ -174,6 +174,24 @@ for cmd in g ga gaa gbs gbl gb gba gbd gbD gbm gbr gco gcb gcB gcp gcpa gcpc \
   compdef _git_alias_complete "$cmd"
 done
 
+# Branch name completion for wt-add (both args: branch and base)
+_wt_branches() {
+  local -a branches
+  branches=(${(f)"$(git for-each-ref --format='%(refname:short)' refs/heads/ refs/remotes/origin/ 2>/dev/null \
+    | sed 's|^origin/||' | grep -Ev '^(HEAD|origin)$' | sort -u)"})
+  _describe 'branch' branches
+}
+compdef _wt_branches wt-add
+
+# Worktree branch completion for wt-rm
+_wt_rm() {
+  local -a wts
+  wts=(${(f)"$(git worktree list --porcelain 2>/dev/null \
+    | awk '/^branch /{sub("refs/heads/", "", $2); print $2}')"})
+  _describe 'worktree branch' wts
+}
+compdef _wt_rm wt-rm
+
 # Function calls
 # Run starship prompt
 eval "$(starship init zsh)"
