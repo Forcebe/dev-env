@@ -11,8 +11,8 @@ pane=$(tmux list-panes -t "=$session:0" -F '#{pane_id}' | head -1)
 tmux send-keys -t "$pane" "nvim ." Enter
 new_pane=$(tmux split-window -v -t "$pane" -c "$dir" -PF '#{pane_id}')
 bottom_right=$(tmux split-window -h -t "$new_pane" -c "$dir" -PF '#{pane_id}')
-tmux send-keys -t "$bottom_right" "claude" Enter
-tmux select-pane -t "$pane"
+tmux send-keys -t "$bottom_right" "claude --permission-mode auto" Enter
+tmux select-pane -t "$bottom_right"
 
 tmux new-window -t "=$session" -n "oracle-run" -c "$dir"
 tmux select-window -t "=$session:oracle-dev"
