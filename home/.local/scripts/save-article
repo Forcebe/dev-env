@@ -4,8 +4,10 @@ set -euo pipefail
 VAULT_DIR="$HOME/personal/docs/articles/saved"
 raw_url="${1:?Usage: save-article <url>}"
 
-# Strip tracking query params (utm_*, fbclid, gclid, etc.) before fetching
-url=$(python3 - "$raw_url" <<'PY'
+# Heredocs live in functions, not inside $( ) -- bash 3.2 (the only bash on
+# macOS) mis-parses quotes in a heredoc body nested in command substitution.
+strip_tracking_params() {
+	python3 - "$1" <<'PY'
 import sys
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
@@ -22,13 +24,19 @@ parsed = urlparse(sys.argv[1].strip())
 kept = [(k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True) if k.lower() not in TRACKING]
 print(urlunparse(parsed._replace(query=urlencode(kept, doseq=True))))
 PY
-)
+}
 
-# Extract article data in one call
-json=$(readable "$url" --json 2>/dev/null)
+url=$(strip_tracking_params "$raw_url")
+
+# Extract article data in one call. readable exits non-zero on pages it declines
+# to parse; capture its reason rather than letting set -e kill us silently.
+readable_err=$(mktemp)
+json=$(readable "$url" --json 2>"$readable_err") || true
+reason=$(grep -vE '^(Retrieving|Processing)\.\.\.$' "$readable_err" | grep -v '^$' | tail -1) || true
+rm -f "$readable_err"
 
 if [[ -z "$json" ]]; then
-	echo "ERROR: Could not extract content from $url" >&2
+	echo "ERROR: Could not extract content from $url${reason:+ ($reason)}" >&2
 	exit 1
 fi
 
@@ -44,7 +52,8 @@ html=$(echo "$json" | jq -r '."html-content" // ""')
 # Strip layout/responsive attributes from <img> tags so pandoc emits plain
 # markdown images. Without this, pandoc keeps raw <img> HTML with explicit
 # width/height, and Obsidian renders them with wrong aspect ratios.
-html=$(printf '%s' "$html" | python3 - <<'PY'
+# Program text is passed via -c so python's stdin stays free for the piped HTML.
+read -r -d '' STRIP_IMG_PY <<'PY' || true
 import re, sys
 html = sys.stdin.read()
 ATTRS = re.compile(
@@ -54,7 +63,8 @@ ATTRS = re.compile(
 )
 sys.stdout.write(re.sub(r'<img\b[^>]*>', lambda m: ATTRS.sub('', m.group(0)), html, flags=re.IGNORECASE))
 PY
-)
+
+html=$(printf '%s' "$html" | python3 -c "$STRIP_IMG_PY")
 
 content=$(echo "$html" | pandoc -f html -t gfm --wrap=none | sed '/^<div/d;/^<\/div>/d;/^---*$/d' | awk '/^# / && !found {found=1; next} 1' | cat -s | sed -e 's/[[:space:]]*$//' -e '1{/^$/d;}' -e '${/^$/d;}')
 
@@ -105,6 +115,14 @@ tags:
   - tag3
 
 Keep the summary to exactly one sentence. Use lowercase kebab-case tags. Pick 3-5 tags.")
+
+# Claude occasionally wraps the YAML in fences or emits a stray token; keep only
+# the lines we asked for so a bad response can't corrupt the frontmatter.
+ai_yaml=$(printf '%s\n' "$ai_yaml" | sed 's/[[:space:]]*$//' | grep -E '^(summary: .|tags:$|  - [A-Za-z0-9])' || true)
+
+if ! printf '%s\n' "$ai_yaml" | grep -q '^summary: .'; then
+	echo "WARNING: Claude returned no usable summary/tags; saving without them." >&2
+fi
 
 # Write the final note: frontmatter + article content.
 # Use single-quoted YAML strings so embedded " and \ are literal; only ' needs
