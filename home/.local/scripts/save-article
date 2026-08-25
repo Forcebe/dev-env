@@ -28,12 +28,23 @@ PY
 
 url=$(strip_tracking_params "$raw_url")
 
-# Extract article data in one call. readable exits non-zero on pages it declines
-# to parse; capture its reason rather than letting set -e kill us silently.
+# Fetch once and feed the file to readable, so the raw page stays available for
+# the extraction sanity check below.
+UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+tmp_html=$(mktemp)
 readable_err=$(mktemp)
-json=$(readable "$url" --json 2>"$readable_err") || true
+trap 'rm -f "$tmp_html" "$readable_err"' EXIT
+
+if ! curl -sSL -A "$UA" --max-time 60 "$url" -o "$tmp_html" 2>"$readable_err"; then
+	echo "ERROR: Could not fetch $url ($(tail -1 "$readable_err"))" >&2
+	exit 1
+fi
+
+# readable exits non-zero on pages it declines to parse; capture its reason
+# rather than letting set -e kill us silently. -l force parses anyway, which
+# rescues plain pages it is merely unsure about.
+json=$(readable "$tmp_html" -b "$url" --json -l force 2>"$readable_err") || true
 reason=$(grep -vE '^(Retrieving|Processing)\.\.\.$' "$readable_err" | grep -v '^$' | tail -1) || true
-rm -f "$readable_err"
 
 if [[ -z "$json" ]]; then
 	echo "ERROR: Could not extract content from $url${reason:+ ($reason)}" >&2
@@ -45,6 +56,22 @@ title=$(echo "$json" | jq -r '.title // ""')
 author=$(echo "$json" | jq -r '.byline // ""')
 length=$(echo "$json" | jq -r '.length // 0')
 reading_time=$(( (length + 999) / 1000 ))
+
+# Readability scores candidate blocks partly by comma count, so a comma-heavy
+# code sample can outscore an entire article and win as the sole "content".
+# Compare against the page's own text to catch that rather than saving a stub.
+read -r -d '' PAGE_TEXT_LEN_PY <<'PY' || true
+import re, sys
+h = sys.stdin.read()
+for t in ('script', 'style', 'nav', 'aside', 'header', 'footer'):
+    h = re.sub(rf'<{t}\b[^>]*>.*?</{t}>', '', h, flags=re.S | re.I)
+print(len(re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', h)).strip()))
+PY
+
+page_len=$(python3 -c "$PAGE_TEXT_LEN_PY" < "$tmp_html")
+if [[ $page_len -gt 2000 && $(( length * 100 / page_len )) -lt 40 ]]; then
+	echo "WARNING: extracted only $(( length * 100 / page_len ))% of the page text ($length of $page_len chars) - the note is probably incomplete." >&2
+fi
 
 # Convert HTML to clean markdown, strip readability wrapper divs and first H1 (added by template)
 html=$(echo "$json" | jq -r '."html-content" // ""')

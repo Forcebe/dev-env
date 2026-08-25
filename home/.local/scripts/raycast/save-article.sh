@@ -43,7 +43,8 @@ err_file=$(mktemp)
 result=$(save-article "$url" 2>"$err_file")
 status=$?
 if [[ $status -eq 0 ]]; then
-	echo "Saved: $(basename "$result")"
+	warning=$(grep '^WARNING: ' "$err_file" | tail -1)
+	echo "Saved: $(basename "$result")${warning:+ - ${warning#WARNING: }}"
 else
 	echo "Failed to save article: $(grep -v '^Summarizing' "$err_file" | tail -1)"
 fi
