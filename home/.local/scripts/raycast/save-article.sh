@@ -15,7 +15,22 @@
 # @raycast.author forcebe
 # @raycast.authorURL https://raycast.com/forcebe
 
-export PATH="$HOME/.local/scripts:$HOME/.local/bin:$HOME/.nvm/versions/node/$(ls "$HOME/.nvm/versions/node/" | sort -V | tail -1)/bin:$PATH"
+# Raycast runs without a login shell, so nvm never initialises. Resolve the bin
+# dir for nvm's *default* alias -- global npm tools (readable-cli) live there,
+# not necessarily under the newest installed node.
+nvm_default_bin() {
+	local versions="$HOME/.nvm/versions/node" want="" dir=""
+	[[ -d "$versions" ]] || return 0
+	[[ -f "$HOME/.nvm/alias/default" ]] && want=$(<"$HOME/.nvm/alias/default")
+	want="${want#v}"
+	if [[ -n "$want" ]]; then
+		dir=$(ls "$versions" | grep -E "^v${want}(\\.|$)" | sort -V | tail -1)
+	fi
+	[[ -z "$dir" ]] && dir=$(ls "$versions" | sort -V | tail -1)
+	[[ -n "$dir" ]] && printf '%s' "$versions/$dir/bin"
+}
+
+export PATH="$HOME/.local/scripts:$HOME/.local/bin:$(nvm_default_bin):/opt/homebrew/bin:$PATH"
 
 url="${1:-$(pbpaste)}"
 
@@ -24,9 +39,13 @@ if [[ -z "$url" || "$url" != http* ]]; then
 	exit 1
 fi
 
-result=$(save-article "$url" 2>/dev/null)
-if [[ $? -eq 0 ]]; then
+err_file=$(mktemp)
+result=$(save-article "$url" 2>"$err_file")
+status=$?
+if [[ $status -eq 0 ]]; then
 	echo "Saved: $(basename "$result")"
 else
-	echo "Failed to save article"
+	echo "Failed to save article: $(grep -v '^Summarizing' "$err_file" | tail -1)"
 fi
+rm -f "$err_file"
+exit $status
