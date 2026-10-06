@@ -81,7 +81,12 @@ The `home-work/` directory contains only files that differ from personal — cur
 
 `wt-add` and `wt-rm` (in `home/.local/scripts/`) manage git worktrees as sibling directories with full environment bootstrapping.
 
-**Creating**: `wt-add <branch>` from inside a repo creates `~/tmrw/<repo>--<branch>` with `.env.local` copied from the main checkout, a tmux session with the repo's `.ready-tmux` layout, and `npm install` running in the run window.
+**Creating**: `wt-add <branch>` from inside a repo creates `~/tmrw/<repo>--<branch>` with a tmux session using the repo's `.ready-tmux` layout, and a bootstrap command running in the run window. How the env is set up depends on the repo:
+
+- **Repos with an `env:pull` npm script** (core-api, and other repos once they adopt it) run `npm install && npm run env:pull && npm run db:local:setup` (the last step only if that script exists). Nothing is copied. `.env` is generated from AWS Secrets Manager, and `db:local:setup` writes `DATABASE_DEV_URL` into `.env.local`. The local Postgres container is shared, so every worktree uses the same database. A failed pull (expired `aws sso login`) or a stopped Docker halts the chain in that pane.
+- **Other repos** get `.env.local` copied from the main checkout, a warning if its `PORT` clashes with a sibling's, and `npm install`.
+
+`wt-rm` deliberately leaves the shared database container alone.
 
 **Removing**: `wt-rm [branch|path]` kills the tmux session and removes the worktree. `wt-rm --all` removes all worktrees for the current repo (with confirmation). `wt-rm --all --global` removes all worktrees across `~/tmrw`.
 

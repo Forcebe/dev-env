@@ -5,7 +5,9 @@ usage() {
 	echo "Usage: wt-add <branch-name> [base-ref]"
 	echo ""
 	echo "Create a git worktree as a sibling directory with environment"
-	echo "bootstrapping, tmux session, and npm install."
+	echo "bootstrapping, tmux session, and npm install. Repos with an"
+	echo "env:pull script run env:pull and db:local:setup; others get"
+	echo "the main checkout's .env.local copied."
 	echo ""
 	echo "New branches start from the repo's default branch, or from"
 	echo "[base-ref] if given (e.g. a parent branch for stacked PRs)."
@@ -108,8 +110,19 @@ else
 	git worktree add --no-track -b "$branch" "$worktree_dir" "$base_ref"
 fi
 
-# Copy .env.local from main checkout
-if [[ -f "$main_dir/.env.local" ]]; then
+has_npm_script() {
+	jq -e --arg s "$1" '.scripts[$s]' "$worktree_dir/package.json" >/dev/null 2>&1
+}
+
+# Repos that pull env from Secrets Manager bootstrap themselves; copying the
+# main checkout's .env.local would reintroduce keys that shadow the pull
+bootstrap="npm install"
+if has_npm_script env:pull; then
+	bootstrap+=" && npm run env:pull"
+	# Local Postgres is shared by name and port, so setup only writes
+	# DATABASE_DEV_URL and starts the existing container
+	has_npm_script db:local:setup && bootstrap+=" && npm run db:local:setup"
+elif [[ -f "$main_dir/.env.local" ]]; then
 	cp "$main_dir/.env.local" "$worktree_dir/.env.local"
 	echo "Copied .env.local from main checkout"
 
@@ -125,7 +138,6 @@ if [[ -f "$main_dir/.env.local" ]]; then
 				echo -e "\033[33mWARNING: PORT=$port is also configured in $(basename "$sibling")/.env.local — you may hit a port conflict\033[0m"
 			fi
 		done
-		# Also check the main checkout
 		main_port=$(grep -m1 '^PORT=' "$main_dir/.env.local" 2>/dev/null | cut -d= -f2 | tr -d '[:space:]"'"'" || true)
 		if [[ "$main_port" == "$port" ]]; then
 			echo -e "\033[33mWARNING: PORT=$port is also configured in the main checkout — you may hit a port conflict\033[0m"
@@ -139,20 +151,18 @@ session_name=$(basename "$worktree_dir" | tr ".,: " "____")
 tmux new-session -ds "$session_name" -c "$worktree_dir"
 tmux-init "$session_name" "$worktree_dir"
 
-# Run npm install in the run window if package.json exists
 if [[ -f "$worktree_dir/package.json" ]]; then
-	# The .ready-tmux layout creates window 1 as the "run" window
-	# Send npm install there
+	# The .ready-tmux layout creates the "run" window last
 	run_window=$(tmux list-windows -t "$session_name" -F '#{window_index}' | tail -1)
 	target="$session_name:$run_window"
 	# Single-window layouts have no run window and focus the claude pane;
-	# target the spare shell pane so npm install isn't typed into claude
+	# target the spare shell pane so the bootstrap isn't typed into claude
 	if [[ $(tmux list-windows -t "$session_name" | wc -l) -eq 1 ]]; then
 		spare_pane=$(tmux list-panes -t "$target" -F '#{pane_index}' | sed -n 2p)
 		[[ -n "$spare_pane" ]] && target="$target.$spare_pane"
 	fi
-	tmux send-keys -t "$target" "npm install" Enter
-	echo "npm install running in the run window"
+	tmux send-keys -t "$target" "$bootstrap" Enter
+	echo "Running in the run window: $bootstrap"
 fi
 
 echo "Worktree created at $worktree_dir"
