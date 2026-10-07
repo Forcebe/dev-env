@@ -21,6 +21,9 @@ alias_name() {
 		tmrw-protocols) echo "ORACLE" ;;
 		tmrw-client)    echo "ATLAS" ;;
 		tmrw-native)    echo "PULSE" ;;
+		tmrw-analytics) echo "ANALYTICS" ;;
+		tmrw-public)    echo "PUBLIC" ;;
+		tmrw-cloud-infrastructure) echo "INFRA" ;;
 		nucleus)        echo "NUCLEUS" ;;
 		*)              echo "$1" ;;
 	esac
@@ -32,6 +35,9 @@ unalias_name() {
 		ORACLE)  echo "tmrw-protocols" ;;
 		ATLAS)   echo "tmrw-client" ;;
 		PULSE)   echo "tmrw-native" ;;
+		ANALYTICS) echo "tmrw-analytics" ;;
+		PUBLIC)  echo "tmrw-public" ;;
+		INFRA)   echo "tmrw-cloud-infrastructure" ;;
 		NUCLEUS) echo "nucleus" ;;
 		*)       echo "$1" ;;
 	esac
