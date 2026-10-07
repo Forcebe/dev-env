@@ -20,6 +20,7 @@ alias_name() {
 		tmrw-core-api) echo "CORE" ;;
 		tmrw-protocols) echo "ORACLE" ;;
 		tmrw-client)    echo "ATLAS" ;;
+		tmrw-native)    echo "PULSE" ;;
 		nucleus)        echo "NUCLEUS" ;;
 		*)              echo "$1" ;;
 	esac
@@ -30,6 +31,7 @@ unalias_name() {
 		CORE)    echo "tmrw-core-api" ;;
 		ORACLE)  echo "tmrw-protocols" ;;
 		ATLAS)   echo "tmrw-client" ;;
+		PULSE)   echo "tmrw-native" ;;
 		NUCLEUS) echo "nucleus" ;;
 		*)       echo "$1" ;;
 	esac
