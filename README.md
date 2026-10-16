@@ -49,7 +49,7 @@ Scripts run in dependency order. `dev-env` depends on `repos`; all other scripts
 | **dev-env** | Deploys all config files from `home/` and work overlays from `home-work/` |
 | **homebrew** | Installs Homebrew and configures shell profile |
 | **1password** | 1Password app + CLI, verifies auth |
-| **claude** | Claude Code CLI, clones claude-config, symlinks agents/skills |
+| **claude** | Claude Code CLI, clones claude-config, links its skills and agents per entry (layer-aware), and links `cw`/`session-context` into `~/.local/bin` |
 | **cursor** | Cursor IDE + 15 extensions |
 | **fonts** | Nerd Fonts (Fira Code, Iosevka Term Slab, Terminess) |
 | **gh** | GitHub CLI + auth |
