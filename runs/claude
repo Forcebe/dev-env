@@ -25,4 +25,8 @@ log_step "Linking agents/ and skills/ -> ~/.claude/"
 execute ln -sfn "$claude_config_dir/agents" "$HOME/.claude/agents"
 execute ln -sfn "$claude_config_dir/skills" "$HOME/.claude/skills"
 
+log_step "Linking cw -> ~/.local/scripts/"
+execute mkdir -p "$HOME/.local/scripts"
+execute ln -sfn "$claude_config_dir/scripts/cw" "$HOME/.local/scripts/cw"
+
 log_manual "Run /reload-plugins in Claude Code to pick up changes"

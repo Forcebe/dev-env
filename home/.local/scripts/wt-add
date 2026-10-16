@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-	echo "Usage: wt-add <branch-name> [base-ref]"
+	echo "Usage: wt-add [--no-attach] <branch-name> [base-ref]"
 	echo ""
 	echo "Create a git worktree as a sibling directory with environment"
 	echo "bootstrapping, tmux session, and npm install. Repos with an"
@@ -12,11 +12,40 @@ usage() {
 	echo "New branches start from the repo's default branch, or from"
 	echo "[base-ref] if given (e.g. a parent branch for stacked PRs)."
 	echo ""
+	echo "  --no-attach   Create the session but leave the current client"
+	echo "                where it is. For agents driving wt-add."
+	echo ""
 	echo "Run from inside any git repository."
 	exit 1
 }
 
-[[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]] && usage
+no_attach=false
+args=()
+while [[ $# -gt 0 ]]; do
+	case "$1" in
+	--no-attach)
+		no_attach=true
+		shift
+		;;
+	-h | --help) usage ;;
+	--)
+		shift
+		args+=("$@")
+		break
+		;;
+	-*)
+		echo "Error: unknown option '$1'" >&2
+		usage
+		;;
+	*)
+		args+=("$1")
+		shift
+		;;
+	esac
+done
+set -- "${args[@]+"${args[@]}"}"
+
+[[ $# -lt 1 ]] && usage
 
 branch="$1"
 base_override="${2:-}"
@@ -145,6 +174,13 @@ elif [[ -f "$main_dir/.env.local" ]]; then
 	fi
 fi
 
+# The agent workspace is keyed by repo, so this is a no-op for every worktree
+# after the first; it just guarantees the sidecar exists before any agent in
+# the new session looks for it.
+if command -v cw >/dev/null 2>&1; then
+	(cd "$worktree_dir" && cw >/dev/null) || true
+fi
+
 # Create tmux session
 session_name=$(basename "$worktree_dir" | tr ".,: " "____")
 
@@ -168,7 +204,9 @@ fi
 echo "Worktree created at $worktree_dir"
 
 # Switch to the new session
-if [[ -z "${TMUX:-}" ]]; then
+if [[ "$no_attach" == true ]]; then
+	echo "Session $session_name is ready (not attached)"
+elif [[ -z "${TMUX:-}" ]]; then
 	tmux attach-session -t "$session_name"
 else
 	tmux switch-client -t "$session_name"
