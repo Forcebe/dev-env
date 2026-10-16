@@ -22,5 +22,17 @@
         "repo": "tmrw-health/claude-plugins"
       }
     }
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/nickmather/.local/bin/session-context"
+          }
+        ]
+      }
+    ]
   }
 }

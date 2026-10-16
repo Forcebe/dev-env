@@ -27,8 +27,9 @@ execute ln -sfn "$claude_config_dir/skills" "$HOME/.claude/skills"
 
 # ~/.local/bin rather than ~/.local/scripts, which dev-env wipes and recopies
 # on every run, taking any symlink into claude-config with it.
-log_step "Linking cw -> ~/.local/bin/"
+log_step "Linking cw and session-context -> ~/.local/bin/"
 execute mkdir -p "$HOME/.local/bin"
 execute ln -sfn "$claude_config_dir/scripts/cw" "$HOME/.local/bin/cw"
+execute ln -sfn "$claude_config_dir/scripts/session-context" "$HOME/.local/bin/session-context"
 
 log_manual "Run /reload-plugins in Claude Code to pick up changes"
