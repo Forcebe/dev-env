@@ -63,9 +63,12 @@ if [[ "$layer" == "work" ]]; then
 	# definitions of one skill name is ambiguous. self-review and apply-review
 	# have no plugin equivalent, so they stay on both layers.
 	skills_skip="$skills_skip code-review review-loop"
-	# Every cr-* agent those skills spawn comes from the plugin as well.
-	agents_skip="$(cd "$claude_config_dir/agents" && ls | tr '\n' ' ')"
 fi
+
+# Agents are deliberately NOT layer-dependent. The plugin ships cr-* files, but
+# plugin agents surface under a "plugin:name" prefix, and these never appeared
+# that way: the bare cr-* types every review skill spawns come from here. Skip
+# them on the work layer and the review skills lose their subagents.
 
 log_step "Linking skills/ and agents/ -> ~/.claude/ (layer: $layer)"
 link_entries "$claude_config_dir/skills" "$HOME/.claude/skills" "$skills_skip"
