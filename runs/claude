@@ -21,9 +21,60 @@ fi
 log_section "claude-config"
 claude_config_dir="$HOME/personal/claude-config"
 clone_or_pull https://github.com/Forcebe/claude-config.git "$claude_config_dir"
-log_step "Linking agents/ and skills/ -> ~/.claude/"
-execute ln -sfn "$claude_config_dir/agents" "$HOME/.claude/agents"
-execute ln -sfn "$claude_config_dir/skills" "$HOME/.claude/skills"
+# ~/.claude/skills and ~/.claude/agents used to be whole-directory symlinks
+# into claude-config. A directory symlink cannot exclude individual entries, so
+# on the work layer the repo's skills collided with the identically named ones
+# in the tmrw-standards plugin. They are now real directories of per-entry
+# links, rebuilt every run so a deleted skill or a layer switch leaves nothing
+# orphaned behind.
+link_entries() {
+	local src="$1" dest="$2" skip="$3"
+	local link entry name
+
+	if [[ -L "$dest" ]]; then
+		log_step "Replacing the $(basename "$dest") symlink with a directory"
+		execute rm -f "$dest"
+	fi
+	execute mkdir -p "$dest"
+
+	# Only links this script owns are removed, so anything else kept here
+	# survives the rebuild.
+	for link in "$dest"/*; do
+		[[ -L "$link" ]] || continue
+		[[ "$(readlink "$link")" == "$claude_config_dir"/* ]] || continue
+		execute rm -f "$link"
+	done
+
+	for entry in "$src"/*; do
+		[[ -e "$entry" ]] || continue
+		name=$(basename "$entry")
+		[[ " $skip " == *" $name "* ]] && continue
+		execute ln -sfn "$entry" "$dest/$name"
+	done
+}
+
+# synced/ is written by Claude Code, not by hand. It only lived in the repo
+# because the whole directory was the symlink target.
+skills_skip="synced"
+agents_skip=""
+layer="${CURRENT_LAYER:-personal}"
+if [[ "$layer" == "work" ]]; then
+	# tmrw-standards ships its own code-review and review-loop, and two
+	# definitions of one skill name is ambiguous. self-review and apply-review
+	# have no plugin equivalent, so they stay on both layers.
+	skills_skip="$skills_skip code-review review-loop"
+	# Every cr-* agent those skills spawn comes from the plugin as well.
+	agents_skip="$(cd "$claude_config_dir/agents" && ls | tr '\n' ' ')"
+fi
+
+log_step "Linking skills/ and agents/ -> ~/.claude/ (layer: $layer)"
+link_entries "$claude_config_dir/skills" "$HOME/.claude/skills" "$skills_skip"
+link_entries "$claude_config_dir/agents" "$HOME/.claude/agents" "$agents_skip"
+
+if [[ -d "$claude_config_dir/skills/synced" && ! -e "$HOME/.claude/skills/synced" ]]; then
+	log_step "Moving synced skills out of the repo"
+	execute mv "$claude_config_dir/skills/synced" "$HOME/.claude/skills/synced"
+fi
 
 # ~/.local/bin rather than ~/.local/scripts, which dev-env wipes and recopies
 # on every run, taking any symlink into claude-config with it.
