@@ -174,13 +174,6 @@ elif [[ -f "$main_dir/.env.local" ]]; then
 	fi
 fi
 
-# The agent workspace is keyed by repo, so this is a no-op for every worktree
-# after the first; it just guarantees the sidecar exists before any agent in
-# the new session looks for it.
-if command -v cw >/dev/null 2>&1; then
-	(cd "$worktree_dir" && cw >/dev/null) || true
-fi
-
 # Create tmux session
 session_name=$(basename "$worktree_dir" | tr ".,: " "____")
 
