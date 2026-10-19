@@ -47,6 +47,9 @@ link_entries() {
 
 	for entry in "$src"/*; do
 		[[ -e "$entry" ]] || continue
+		# A directory with nothing in it is what git leaves behind when a skill's
+		# files are deleted, and linking it deploys a skill that does not exist.
+		if [[ -d "$entry" ]] && [[ -z "$(ls -A "$entry")" ]]; then continue; fi
 		name=$(basename "$entry")
 		[[ " $skip " == *" $name "* ]] && continue
 		execute ln -sfn "$entry" "$dest/$name"
