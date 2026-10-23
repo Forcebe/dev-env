@@ -25,6 +25,13 @@ alias_name() {
 		tmrw-public)    echo "PUBLIC" ;;
 		tmrw-cloud-infrastructure) echo "INFRA" ;;
 		nucleus)        echo "NUCLEUS" ;;
+		tmrw-auth0) echo "AUTH" ;;
+		tmrw-landing) echo "LANDING" ;;
+		tmrw-lume) echo "LUME" ;;
+		anonybot) echo "ANONYBOT" ;;
+		biomarker-scores) echo "SCORES" ;;
+		claude-plugins) echo "TMRW-CLAUDE" ;;
+		tools-developer) echo "DEVTOOLS" ;;
 		*)              echo "$1" ;;
 	esac
 }
@@ -39,18 +46,25 @@ unalias_name() {
 		PUBLIC)  echo "tmrw-public" ;;
 		INFRA)   echo "tmrw-cloud-infrastructure" ;;
 		NUCLEUS) echo "nucleus" ;;
+		AUTH) echo "tmrw-auth0" ;;
+		LANDING) echo "tmrw-landing" ;;
+		LUME) echo "tmrw-lume" ;;
+		ANONYBOT) echo "anonybot" ;;
+		SCORES) echo "biomarker-scores" ;;
+		TMRW-CLAUDE) echo "claude-plugins" ;;
+		DEVTOOLS) echo "tools-developer" ;;
 		*)       echo "$1" ;;
 	esac
 }
 
-# tmrw-client--feat-login -> "ATLAS/feat-login (tmrw-client--feat-login)".
-# The real name is appended only for aliased repos, so fzf can match either.
+# tmrw-client--feat-login -> "ATLAS/feat-login (tmrw-client)".
+# The repo name is appended only for aliased repos, so fzf can match either.
 label() {
 	local repo="${1%%--*}" alias display
 	alias=$(alias_name "$repo")
 	display="$alias"
 	[[ "$1" == *"--"* ]] && display+="/${1#*--}"
-	[[ "$alias" != "$repo" ]] && display+=" ($1)"
+	[[ "$alias" != "$repo" ]] && display+=" ($repo)"
 	echo "$display"
 }
 
