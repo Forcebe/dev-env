@@ -43,6 +43,17 @@ unalias_name() {
 	esac
 }
 
+# tmrw-client--feat-login -> "ATLAS/feat-login (tmrw-client--feat-login)".
+# The real name is appended only for aliased repos, so fzf can match either.
+label() {
+	local repo="${1%%--*}" alias display
+	alias=$(alias_name "$repo")
+	display="$alias"
+	[[ "$1" == *"--"* ]] && display+="/${1#*--}"
+	[[ "$alias" != "$repo" ]] && display+=" ($1)"
+	echo "$display"
+}
+
 # Detect sessions with running dev servers (single tmux call, no associative arrays for bash 3 compat)
 running_session_list=$(tmux list-panes -a -F '#{session_name}|#{pane_current_command}' 2>/dev/null \
 	| grep -E '\|(node|next|npm|npx|tsx|ts-node)$' | cut -d'|' -f1 | sort -u)
@@ -51,13 +62,7 @@ running_session_list=$(tmux list-panes -a -F '#{session_name}|#{pane_current_com
 sessions=""
 while IFS='|' read -r path name activity; do
 	[[ -z "$name" ]] && continue
-	if [[ "$name" == *"--"* ]]; then
-		repo_name="${name%%--*}"
-		branch="${name#*--}"
-		display="$(alias_name "$repo_name")/${branch}"
-	else
-		display=$(alias_name "$name")
-	fi
+	display=$(label "$name")
 	if [[ "$path" == "$HOME/tmrw"* ]]; then
 		prefix="[WORK]"
 	else
@@ -81,18 +86,11 @@ while IFS= read -r dir; do
 	base=$(basename "$dir")
 	session_check=$(echo "$base" | tr ".,: " "____")
 	echo "$active_session_list" | grep -qxF "$session_check" && continue
-	if [[ "$base" == *"--"* ]]; then
-		# Worktree directory: tmrw-client--feat-login -> ATLAS/feat-login
-		repo_name="${base%%--*}"
-		branch="${base#*--}"
-		directories+="$(alias_name "$repo_name")/${branch}"$'\n'
+	repo_name="${base%%--*}"
+	if [[ "$base" == *"--"* || "$(alias_name "$repo_name")" != "$repo_name" ]]; then
+		directories+="$(label "$base")"$'\n'
 	else
-		display=$(alias_name "$base")
-		if [[ "$display" != "$base" ]]; then
-			directories+="$display"$'\n'
-		else
-			directories+="$dir"$'\n'
-		fi
+		directories+="$dir"$'\n'
 	fi
 done < <({ echo ~/tmrw; find ~/personal ~/tmrw -mindepth 1 -maxdepth 1 -type d; } 2>/dev/null)
 
@@ -101,6 +99,7 @@ selected=$(printf '%s\n%s\n' "$sessions" "$directories" | grep -v '^$' | fzf)
 if [[ -z "$selected" ]]; then
 	exit 0
 fi
+selected="${selected% (*)}"
 
 switch_to() {
 	if [[ -z "$TMUX" ]]; then
