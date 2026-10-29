@@ -3,33 +3,56 @@ set -euo pipefail
 
 STALE_DAYS=14
 ACTIVE_HOURS=24
+BRANCH_LOG="$HOME/.cache/wt-prune.log"
 
 usage() {
 	echo "Usage: wt-prune [--dry] [--stale-days N]"
 	echo ""
-	echo "Remove worktrees under ~/tmrw that are safe to drop. Worktrees in"
-	echo "active use are never removed: any file touched in the last"
-	echo "${ACTIVE_HOURS}h, or a tmux session attached or active within ${ACTIVE_HOURS}h, exempts"
-	echo "a worktree (covers an open planning/agent session that hasn't"
-	echo "committed yet). A merely-existing idle session does not."
+	echo "Remove worktrees and local branches under ~/tmrw that are safe to"
+	echo "drop. Worktrees in active use are never removed: any file touched in"
+	echo "the last ${ACTIVE_HOURS}h, or a tmux session attached or active within"
+	echo "${ACTIVE_HOURS}h, exempts a worktree (covers an open planning/agent"
+	echo "session that hasn't committed yet). A merely-existing idle session"
+	echo "does not."
 	echo ""
-	echo "  Auto-pruned regardless of activity (only an attached session blocks):"
+	echo "A tree counts as clean when its only changes are untracked symlinks"
+	echo "or an AGENTS.md holding nothing but the block 'next dev' writes."
+	echo ""
+	echo "\"Merged\" below means the branch's changes are already in"
+	echo "origin/develop, origin/main, or origin/master: merged directly,"
+	echo "squash-merged, or rebased and merged (every commit has a"
+	echo "patch-equivalent upstream)."
+	echo ""
+	echo "  Worktrees auto-removed regardless of activity (only an attached"
+	echo "  session blocks):"
 	echo "    - clean tree, branch was pushed and origin/<branch> is gone"
-	echo "      after fetch --prune (the classic merged-and-deleted signal;"
-	echo "      a not-yet-started worktree can never look like this)."
+	echo "      after fetch --prune."
 	echo ""
-	echo "  Auto-pruned when inactive for ${ACTIVE_HOURS}h (clean working tree):"
-	echo "    - branch fully merged by content (empty diff vs"
-	echo "      origin/develop, origin/main, or origin/master). A fresh"
-	echo "      worktree also diffs empty against its base, hence the"
-	echo "      activity guard on this path."
+	echo "  Worktrees auto-removed when inactive for ${ACTIVE_HOURS}h (clean tree):"
+	echo "    - branch is merged. A fresh worktree is trivially merged too,"
+	echo "      hence the activity guard on this path."
+	echo "    - detached HEAD (a PR checked out for review) whose commit is"
+	echo "      merged or exists on a remote branch."
 	echo ""
-	echo "  Confirmed per-branch (stale + unbacked work):"
+	echo "  Worktrees needing confirmation (inactive for ${ACTIVE_HOURS}h):"
 	echo "    - last commit older than N days (default ${STALE_DAYS}) AND the"
-	echo "      branch was never pushed or the tree is dirty. These hold"
-	echo "      work with no remote backup, so each is confirmed before"
-	echo "      removal — via a terminal prompt when run interactively,"
-	echo "      or a macOS dialog (default: Keep) when run in background."
+	echo "      branch was never pushed or the tree is dirty."
+	echo "    - orphaned directories whose git metadata is gone."
+	echo ""
+	echo "  Local branches (not checked out anywhere) in every ~/tmrw repo:"
+	echo "    - deleted when merged and the remote branch is gone or was"
+	echo "      never pushed."
+	echo "    - remote gone but not provably merged: need confirmation,"
+	echo "      interactive runs only."
+	echo ""
+	echo "  Everything needing confirmation is asked in one prompt before"
+	echo "  anything is removed: delete all, none, or select one by one. A"
+	echo "  background run shows one macOS dialog for worktrees instead"
+	echo "  (default: Keep)."
+	echo ""
+	echo "  Each deleted branch's name and SHA are appended to"
+	echo "  ${BRANCH_LOG/#$HOME/~} so it can be restored with"
+	echo "  'git branch <name> <sha>'."
 	echo ""
 	echo "Options:"
 	echo "  --dry          List candidates and fire notification, but do not remove"
@@ -55,9 +78,8 @@ now=$(date +%s)
 
 shopt -s nullglob
 worktree_dirs=("$HOME/tmrw"/*--*/)
+repo_dirs=("$HOME/tmrw"/*/.git/)
 shopt -u nullglob
-
-[[ ${#worktree_dirs[@]} -eq 0 ]] && exit 0
 
 # Build parallel arrays: wt_list[i] and main_list[i] are the worktree
 # and its main checkout. Dedup mains into unique_mains so we fetch once
@@ -65,31 +87,59 @@ shopt -u nullglob
 # parallel-arrays approach.
 wt_list=()
 main_list=()
+orphan_list=()
 unique_mains=()
 fetch_ok_mains=()
 
-for wt in "${worktree_dirs[@]}"; do
+add_main() {
+	if [[ ! " ${unique_mains[*]:-} " == *" $1 "* ]]; then
+		unique_mains+=("$1")
+	fi
+}
+
+# Either the admin dir under the main repo's .git/worktrees was deleted
+# (the .git file points nowhere), or the worktree was removed and a dev
+# server recreated build output in the empty directory (no .git at all).
+# Git can't open either, so they would otherwise be skipped forever.
+is_orphan() {
+	local wt="$1" gitdir
+	[[ -e "$wt/.git" ]] || return 0
+	[[ -f "$wt/.git" ]] || return 1
+	gitdir=$(sed -n 's/^gitdir: //p' "$wt/.git")
+	[[ -n "$gitdir" && ! -d "$gitdir" ]]
+}
+
+for wt in ${worktree_dirs[@]+"${worktree_dirs[@]}"}; do
 	wt="${wt%/}"
+	if is_orphan "$wt"; then
+		orphan_list+=("$wt")
+		continue
+	fi
 	main=$(git -C "$wt" worktree list --porcelain 2>/dev/null | head -1 | sed 's/^worktree //') || true
-	[[ -z "$main" ]] && continue
+	[[ -z "$main" || "$main" == "$wt" ]] && continue
 	wt_list+=("$wt")
 	main_list+=("$main")
-	if [[ ! " ${unique_mains[*]:-} " == *" $main "* ]]; then
-		unique_mains+=("$main")
-	fi
+	add_main "$main"
 done
 
-for main in "${unique_mains[@]}"; do
+for repo in ${repo_dirs[@]+"${repo_dirs[@]}"}; do
+	add_main "${repo%/.git/}"
+done
+
+[[ ${#unique_mains[@]} -eq 0 && ${#orphan_list[@]} -eq 0 ]] && exit 0
+
+for main in ${unique_mains[@]+"${unique_mains[@]}"}; do
 	if git -C "$main" fetch --prune --quiet 2>/dev/null; then
 		fetch_ok_mains+=("$main")
 	fi
 done
 
+session_name() {
+	basename "$1" | tr ".,: " "____"
+}
+
 kill_session() {
-	local dir="$1"
-	local session_name
-	session_name=$(basename "$dir" | tr ".,: " "____")
-	tmux kill-session -t "$session_name" 2>/dev/null || true
+	tmux kill-session -t "$(session_name "$1")" 2>/dev/null || true
 }
 
 remove_wt() {
@@ -108,7 +158,7 @@ remove_wt() {
 # from the file scan for speed.
 recently_active() {
 	local wt="$1" session info attached activity
-	session=$(basename "$wt" | tr ".,: " "____")
+	session=$(session_name "$wt")
 	info=$(tmux list-sessions -f "#{==:#{session_name},${session}}" -F '#{session_attached} #{session_activity}' 2>/dev/null || true)
 	if [[ -n "$info" ]]; then
 		read -r attached activity <<<"$info"
@@ -120,43 +170,75 @@ recently_active() {
 
 session_attached() {
 	local session
-	session=$(basename "$1" | tr ".,: " "____")
+	session=$(session_name "$1")
 	[[ -n "$(tmux list-sessions -f "#{&&:#{==:#{session_name},${session}},#{session_attached}}" -F x 2>/dev/null)" ]]
 }
 
-# Branch introduces nothing not already in a remote base → its content is
-# merged, even if the branch itself was never pushed. Three-dot diff so we
-# only look at what the branch added since it forked, not how far the base
-# moved on. --quiet exits 0 when there's no diff; non-zero (1 = has diff,
-# 128 = bad ref) means not-merged-against-this-base, so we try the next.
-is_content_merged() {
-	local wt="$1" base
+# Untracked files that tooling regenerates and that hold no work: symlinks
+# (e.g. a shared .api-token) and the AGENTS.md that `next dev` writes into
+# every Next.js checkout. Without this, nearly every finished worktree
+# reads as dirty and is never pruned.
+is_generated() {
+	local path="$1"
+	[[ -L "$path" ]] && return 0
+	[[ "$(basename "$path")" == "AGENTS.md" && -f "$path" ]] || return 1
+	! sed '/BEGIN:nextjs-agent-rules/,/END:nextjs-agent-rules/d' "$path" | grep -q '[^[:space:]]'
+}
+
+has_changes() {
+	local wt="$1" line
+	while IFS= read -r line; do
+		[[ "$line" == '?? '* ]] && is_generated "$wt/${line#?? }" && continue
+		return 0
+	done < <(git -C "$wt" status --porcelain 2>/dev/null)
+	return 1
+}
+
+# The ref's changes are already in a remote base. Checked cheapest first:
+# ancestor (merge commit or fast-forward); merging into the base leaves its
+# tree unchanged (squash merge); every commit has a patch-equivalent
+# upstream (the branch was rebased before merging, so this copy is stale).
+is_merged() {
+	local repo="$1" ref="$2" base base_tree cherry
 	for base in develop main master; do
-		git -C "$wt" rev-parse --verify --quiet "origin/$base" >/dev/null 2>&1 || continue
-		if git -C "$wt" diff --quiet "origin/${base}...HEAD" 2>/dev/null; then
+		git -C "$repo" rev-parse --verify --quiet "origin/$base" >/dev/null 2>&1 || continue
+		git -C "$repo" merge-base --is-ancestor "$ref" "origin/$base" 2>/dev/null && return 0
+		base_tree=$(git -C "$repo" rev-parse "origin/$base^{tree}")
+		[[ "$(git -C "$repo" merge-tree --write-tree "origin/$base" "$ref" 2>/dev/null | head -1)" == "$base_tree" ]] && return 0
+		if cherry=$(git -C "$repo" cherry "origin/$base" "$ref" 2>/dev/null) && ! grep -q '^+' <<<"$cherry"; then
 			return 0
 		fi
 	done
 	return 1
 }
 
-# Ask before deleting unbacked work. A TTY gets a terminal prompt; a
-# detached background run (the sessionizer fork) gets a macOS dialog that
-# defaults to Keep and auto-dismisses, so an unattended pass never deletes.
-confirm_delete() {
-	local prompt="$1" btn
-	if [[ -t 0 ]]; then
-		local ans
-		read -r -p "$prompt [y/N] " ans </dev/tty || return 1
-		[[ "$ans" == "y" || "$ans" == "Y" ]]
+# Everything is planned before anything is removed, so all confirmations
+# happen in one prompt up front instead of between slow removals. Plan
+# entries are tab-separated "<main> <target> <reason> <branch>"; "-" fills
+# empty fields because bash collapses consecutive tab separators.
+auto_wts=()
+ask_wts=()
+auto_branches=()
+ask_branches=()
+
+plan_wt() {
+	local action="$1" main="$2" wt="$3" reason="$4" branch="${5:--}" entry
+	entry="$main"$'\t'"$wt"$'\t'"$reason"$'\t'"$branch"
+	[[ "$dry" == "true" ]] && echo "would $action ($reason): $(basename "$wt")"
+	if [[ "$action" == remove ]]; then
+		auto_wts+=("$entry")
 	else
-		local msg=${prompt//\"/\\\"}
-		btn=$(osascript -e "display dialog \"${msg}\" buttons {\"Keep\", \"Delete\"} default button \"Keep\" with title \"Stale worktree\" giving up after 120" 2>/dev/null) || return 1
-		[[ "$btn" == *"button returned:Delete"* ]]
+		ask_wts+=("$entry")
 	fi
 }
 
-removed=()
+for wt in ${orphan_list[@]+"${orphan_list[@]}"}; do
+	if recently_active "$wt"; then
+		[[ "$dry" == "true" ]] && echo "skip (active <${ACTIVE_HOURS}h): $(basename "$wt")"
+		continue
+	fi
+	plan_wt prompt - "$wt" "orphaned, git no longer tracks it"
+done
 
 for i in "${!wt_list[@]}"; do
 	wt="${wt_list[$i]}"
@@ -164,13 +246,26 @@ for i in "${!wt_list[@]}"; do
 	# Skip worktrees whose main checkout's fetch failed
 	[[ " ${fetch_ok_mains[*]:-} " == *" $main "* ]] || continue
 
-	branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-	[[ -z "$branch" || "$branch" == "HEAD" ]] && continue
-
 	name=$(basename "$wt")
+	branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+	[[ -z "$branch" ]] && continue
 
 	dirty=false
-	[[ -n "$(git -C "$wt" status --porcelain 2>/dev/null)" ]] && dirty=true
+	has_changes "$wt" && dirty=true
+
+	# Detached HEAD is a PR checked out for review. Once its commit is
+	# merged or on a remote branch, removing the worktree loses nothing.
+	if [[ "$branch" == "HEAD" ]]; then
+		[[ "$dirty" == "true" ]] && continue
+		if recently_active "$wt"; then
+			[[ "$dry" == "true" ]] && echo "skip (active <${ACTIVE_HOURS}h): $name"
+			continue
+		fi
+		if is_merged "$wt" HEAD || [[ -n "$(git -C "$wt" branch -r --contains HEAD 2>/dev/null)" ]]; then
+			plan_wt remove "$main" "$wt" "detached, commit on remote"
+		fi
+		continue
+	fi
 
 	pushed=false
 	git -C "$wt" config --get "branch.${branch}.remote" >/dev/null 2>&1 && pushed=true
@@ -182,19 +277,15 @@ for i in "${!wt_list[@]}"; do
 
 	# Pushed-then-deleted is the one finished signal a not-yet-started
 	# worktree can never show, so it bypasses the activity guard: the work
-	# is on the remote and the branch ref survives `worktree remove`.
+	# is on the remote and the branch ref survives `worktree remove` (the
+	# branch sweep decides whether the ref itself can go).
 	# Only an attached session (you're sitting in it) still blocks.
 	if [[ "$dirty" == "false" && "$remote_gone" == "true" ]]; then
 		if session_attached "$wt"; then
 			[[ "$dry" == "true" ]] && echo "skip (attached): $name"
 			continue
 		fi
-		if [[ "$dry" == "true" ]]; then
-			echo "would remove (remote gone): $name"
-		else
-			remove_wt "$wt" "$main" || continue
-		fi
-		removed+=("$name")
+		plan_wt remove "$main" "$wt" "remote gone" "$branch"
 		continue
 	fi
 
@@ -203,48 +294,165 @@ for i in "${!wt_list[@]}"; do
 		continue
 	fi
 
-	# Content-merged auto-prune keeps the activity guard: a fresh worktree
-	# also diffs empty against its base, so activity is what separates
-	# "not started yet" from "finished but never had its remote deleted".
-	if [[ "$dirty" == "false" ]] && is_content_merged "$wt"; then
-		if [[ "$dry" == "true" ]]; then
-			echo "would remove (merged): $name"
-		else
-			remove_wt "$wt" "$main" || continue
-		fi
-		removed+=("$name")
+	if [[ "$dirty" == "false" ]] && is_merged "$wt" HEAD; then
+		plan_wt remove "$main" "$wt" "merged" "$branch"
 		continue
 	fi
 
 	# Stale + unbacked: old branch that was never pushed, or a dirty tree
-	# whose changes exist nowhere else. Confirm each before removing.
+	# whose changes exist nowhere else.
 	last=$(git -C "$wt" log -1 --format=%ct 2>/dev/null || echo "")
 	[[ -z "$last" ]] && continue
 	if (( now - last > STALE_DAYS * 86400 )) && { [[ "$pushed" == "false" ]] || [[ "$dirty" == "true" ]]; }; then
 		if [[ "$dirty" == "true" ]]; then
-			reason="dirty, uncommitted changes only here"
+			reason="stale, uncommitted changes only here"
 		else
-			reason="never pushed, commits only here"
+			reason="stale, never pushed, commits only here"
 		fi
-		if [[ "$dry" == "true" ]]; then
-			echo "would prompt (stale, $reason): $name"
-			continue
-		fi
-		if confirm_delete "Delete stale worktree '${name}' (${reason})?"; then
-			remove_wt "$wt" "$main" && removed+=("$name")
-		fi
-		continue
+		plan_wt prompt "$main" "$wt" "$reason"
 	fi
 done
 
-if [[ ${#removed[@]} -gt 0 ]]; then
-	if [[ "$dry" == "true" ]]; then
-		title="Worktrees would be pruned (dry)"
-	else
-		title="Worktrees pruned"
-	fi
-	summary=$(IFS=, ; echo "${removed[*]}")
+# Branches checked out in a worktree are skipped unless that worktree is
+# planned for automatic removal. Branches with a live remote are left
+# alone: whoever owns that remote branch decides when it's done.
+plan_branches() {
+	local main="$1" repo checked_out freed entry e_main e_wt e_reason e_branch branch upstream track
+	repo=$(basename "$main")
+	checked_out=$(git -C "$main" worktree list --porcelain | sed -n 's|^branch refs/heads/||p')
+	freed=""
+	for entry in ${auto_wts[@]+"${auto_wts[@]}"}; do
+		IFS=$'\t' read -r e_main e_wt e_reason e_branch <<<"$entry"
+		[[ "$e_main" == "$main" ]] && freed+="$e_branch"$'\n'
+	done
+
+	while read -r branch upstream track; do
+		case "$branch" in develop|main|master) continue ;; esac
+		grep -qxF "$branch" <<<"$checked_out" && ! grep -qxF "$branch" <<<"$freed" && continue
+		[[ -z "$upstream" || "$track" == "[gone]" ]] || continue
+
+		if is_merged "$main" "refs/heads/$branch"; then
+			[[ "$dry" == "true" ]] && echo "would delete branch (merged): $repo $branch"
+			auto_branches+=("$main"$'\t'"$branch")
+		elif [[ "$track" == "[gone]" ]]; then
+			[[ "$dry" == "true" ]] && echo "would prompt (remote gone, not found in base): $repo $branch"
+			ask_branches+=("$main"$'\t'"$branch")
+		fi
+	done < <(git -C "$main" for-each-ref refs/heads --format='%(refname:short) %(upstream:short) %(upstream:track)')
+}
+
+[[ -t 1 && "$dry" == "false" ]] && echo "Checking branches..."
+for main in ${fetch_ok_mains[@]+"${fetch_ok_mains[@]}"}; do
+	plan_branches "$main"
+done
+
+notify() {
+	local title="$1" summary="$2"
 	# Escape double quotes for AppleScript
-	summary_escaped=${summary//\"/\\\"}
-	osascript -e "display notification \"${summary_escaped}\" with title \"${title}\"" >/dev/null 2>&1 || true
+	summary=${summary//\"/\\\"}
+	osascript -e "display notification \"${summary}\" with title \"${title}\"" >/dev/null 2>&1 || true
+}
+
+if [[ "$dry" == "true" ]]; then
+	total=$(( ${#auto_wts[@]} + ${#auto_branches[@]} ))
+	(( total > 0 )) && notify "Worktrees would be pruned (dry)" "${#auto_wts[@]} worktrees, ${#auto_branches[@]} branches"
+	exit 0
 fi
+
+# Unproven branches are usually stale local copies of PRs that changed
+# after this checkout last pulled, but they can hold unpushed commits, so
+# a background pass leaves them for an interactive run.
+[[ -t 0 ]] || ask_branches=()
+
+approved_wts=()
+approved_branches=()
+
+describe_ask() {
+	local kind="$1" entry="$2" main target reason branch
+	if [[ "$kind" == wt ]]; then
+		IFS=$'\t' read -r main target reason branch <<<"$entry"
+		echo "worktree $(basename "$target") ($reason)"
+	else
+		IFS=$'\t' read -r main branch <<<"$entry"
+		echo "branch $(basename "$main") $branch (remote gone, not found in base, last commit $(git -C "$main" log -1 --format=%cr "refs/heads/$branch"))"
+	fi
+}
+
+ask_total=$(( ${#ask_wts[@]} + ${#ask_branches[@]} ))
+if (( ask_total > 0 )) && [[ -t 0 ]]; then
+	echo "These may hold work that exists nowhere else:"
+	n=0
+	for entry in ${ask_wts[@]+"${ask_wts[@]}"}; do
+		n=$((n + 1)); echo "  $n. $(describe_ask wt "$entry")"
+	done
+	for entry in ${ask_branches[@]+"${ask_branches[@]}"}; do
+		n=$((n + 1)); echo "  $n. $(describe_ask branch "$entry")"
+	done
+	read -r -p "Delete all ${ask_total}? [y]es / [N]o / [s]elect one by one: " ans </dev/tty || ans=n
+	case "$ans" in
+		y|Y)
+			approved_wts=(${ask_wts[@]+"${ask_wts[@]}"})
+			approved_branches=(${ask_branches[@]+"${ask_branches[@]}"})
+			;;
+		s|S)
+			for entry in ${ask_wts[@]+"${ask_wts[@]}"}; do
+				read -r -p "Delete $(describe_ask wt "$entry")? [y/N] " ans </dev/tty || ans=n
+				[[ "$ans" == "y" || "$ans" == "Y" ]] && approved_wts+=("$entry")
+			done
+			for entry in ${ask_branches[@]+"${ask_branches[@]}"}; do
+				read -r -p "Delete $(describe_ask branch "$entry")? [y/N] " ans </dev/tty || ans=n
+				[[ "$ans" == "y" || "$ans" == "Y" ]] && approved_branches+=("$entry")
+			done
+			;;
+	esac
+elif (( ask_total > 0 )); then
+	# Background run (the sessionizer fork): one dialog that defaults to
+	# Keep and auto-dismisses, so an unattended pass never deletes.
+	names=""
+	for entry in "${ask_wts[@]}"; do
+		names+="$(describe_ask wt "$entry")\n"
+	done
+	names=${names//\"/\\\"}
+	btn=$(osascript -e "display dialog \"Delete these worktrees? They may hold work that exists nowhere else.\n\n${names}\" buttons {\"Keep\", \"Delete all\"} default button \"Keep\" with title \"Stale worktrees\" giving up after 120" 2>/dev/null) || btn=""
+	[[ "$btn" == *"button returned:Delete all"* ]] && approved_wts=("${ask_wts[@]}")
+fi
+
+removed=()
+
+remove_planned_wt() {
+	local main target reason branch
+	IFS=$'\t' read -r main target reason branch <<<"$1"
+	echo "Removing worktree $(basename "$target") ($reason)..."
+	kill_session "$target"
+	if [[ "$main" == "-" ]]; then
+		rm -rf "$target"
+	else
+		git -C "$main" worktree remove --force "$target" 2>/dev/null
+	fi && removed+=("$(basename "$target")")
+}
+
+for entry in ${auto_wts[@]+"${auto_wts[@]}"} ${approved_wts[@]+"${approved_wts[@]}"}; do
+	remove_planned_wt "$entry" || echo "  failed, left in place" >&2
+done
+
+deleted_branches=0
+mkdir -p "$(dirname "$BRANCH_LOG")"
+
+for entry in ${auto_branches[@]+"${auto_branches[@]}"} ${approved_branches[@]+"${approved_branches[@]}"}; do
+	IFS=$'\t' read -r main branch <<<"$entry"
+	sha=$(git -C "$main" rev-parse --verify --quiet "refs/heads/$branch") || continue
+	# Fails when the branch's worktree couldn't be removed above.
+	git -C "$main" branch -D --quiet "$branch" 2>/dev/null || continue
+	echo "$(date +%FT%T) $main $branch $sha" >>"$BRANCH_LOG"
+	deleted_branches=$((deleted_branches + 1))
+done
+(( deleted_branches > 0 )) && echo "Deleted ${deleted_branches} branches (restore from ${BRANCH_LOG/#$HOME/~})"
+
+if [[ ${#removed[@]} -gt 0 || $deleted_branches -gt 0 ]]; then
+	summary=$(IFS=, ; echo "${removed[*]:-}")
+	if [[ $deleted_branches -gt 0 ]]; then
+		summary="${summary:+$summary, }${deleted_branches} branches deleted"
+	fi
+	notify "Worktrees pruned" "$summary"
+fi
+exit 0
